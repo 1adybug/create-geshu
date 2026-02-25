@@ -1,0 +1,283 @@
+#!/usr/bin/env node
+
+import { spawn } from "node:child_process"
+import { promises as fs } from "node:fs"
+import path from "node:path"
+import process from "node:process"
+import { createInterface } from "node:readline/promises"
+
+type ProjectType = "rsbuild" | "nextjs"
+
+type TemplateConfig = {
+    cloneUrl: string
+    remoteUrl: string
+    label: string
+}
+
+const TEMPLATE_MAP: Record<ProjectType, TemplateConfig> = {
+    rsbuild: {
+        cloneUrl: "https://github.com/1adybug/geshu-rsbuild-template",
+        remoteUrl: "https://github.com/1adybug/geshu-rsbuild-template.git",
+        label: "Rsbuild",
+    },
+    nextjs: {
+        cloneUrl: "https://github.com/1adybug/geshu-next-template",
+        remoteUrl: "https://github.com/1adybug/geshu-next-template.git",
+        label: "Next.js",
+    },
+}
+
+const WINDOWS_RESERVED_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
+const NODE_CORE_MODULES = new Set([
+    "node_modules",
+    "favicon.ico",
+    "http",
+    "https",
+    "stream",
+    "crypto",
+    "path",
+    "fs",
+    "url",
+    "util",
+    "os",
+    "net",
+    "tls",
+    "zlib",
+    "events",
+    "buffer",
+    "child_process",
+    "worker_threads",
+])
+
+async function main() {
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    })
+
+    try {
+        const options = parseCliOptions(process.argv.slice(2))
+        const projectType = options.projectType ?? (await promptProjectType(rl))
+        const projectName = options.projectName ?? (await promptProjectName(rl))
+        const nameErrors = validateProjectName(projectName)
+
+        if (nameErrors.length > 0) {
+            throw new Error(`项目名称不合法:\n${nameErrors.map(item => `- ${item}`).join("\n")}`)
+        }
+
+        const targetDir = path.resolve(process.cwd(), projectName)
+
+        await assertTargetDirectoryAvailable(targetDir, projectName)
+
+        const template = TEMPLATE_MAP[projectType]
+
+        console.log(`\n开始创建项目: ${projectName} (${template.label})`)
+        await runCommand("git", ["clone", template.cloneUrl, projectName], process.cwd())
+        await runCommand("git", ["remote", "add", "template", template.remoteUrl], targetDir)
+        await updatePackageName(targetDir, projectName)
+        await runCommand("git", ["add", "package.json"], targetDir)
+        await runCommand("git", ["commit", "-m", "✨feature: init"], targetDir)
+
+        console.log(`\n创建完成: ${projectName}`)
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "未知错误，请重试。"
+        console.error(`\n创建失败: ${message}`)
+        process.exitCode = 1
+    } finally {
+        rl.close()
+    }
+}
+
+function parseCliOptions(args: string[]): {
+    projectType?: ProjectType
+    projectName?: string
+} {
+    const options: { projectType?: ProjectType; projectName?: string } = {}
+
+    for (let index = 0; index < args.length; index += 1) {
+        const current = args[index]
+
+        if (current === "--type" || current === "-t") {
+            const value = args[index + 1]
+            if (!value) throw new Error("参数 --type 缺少值，支持 rsbuild / nextjs。")
+
+            const parsed = normalizeProjectType(value)
+
+            if (!parsed) {
+                throw new Error(`参数 --type 无效: ${value}。支持 rsbuild / nextjs。`)
+            }
+
+            options.projectType = parsed
+            index += 1
+            continue
+        }
+
+        if (current === "--name" || current === "-n") {
+            const value = args[index + 1]
+            if (!value) throw new Error("参数 --name 缺少值。")
+
+            options.projectName = value.trim()
+            index += 1
+            continue
+        }
+    }
+
+    return options
+}
+
+function normalizeProjectType(input: string): ProjectType | null {
+    const value = input.trim().toLowerCase()
+
+    if (value === "rsbuild" || value === "1") return "rsbuild"
+
+    if (value === "nextjs" || value === "next.js" || value === "next" || value === "2") return "nextjs"
+
+    return null
+}
+
+async function promptProjectType(rl: ReturnType<typeof createInterface>): Promise<ProjectType> {
+    while (true) {
+        const answer = (await rl.question(["请选择项目类型:", "1. Rsbuild", "2. Next.js", "请输入序号 (1/2): "].join("\n"))).trim()
+
+        if (answer === "1") return "rsbuild"
+
+        if (answer === "2") return "nextjs"
+
+        console.error("输入无效，请输入 1 或 2。")
+    }
+}
+
+async function promptProjectName(rl: ReturnType<typeof createInterface>): Promise<string> {
+    while (true) {
+        const answer = (await rl.question("请输入项目名称: ")).trim()
+
+        if (!answer) {
+            console.error("项目名称不能为空。")
+            continue
+        }
+
+        const errors = validateProjectName(answer)
+
+        if (errors.length === 0) return answer
+
+        console.error("\n项目名称不合法:")
+        for (const item of errors) console.error(`- ${item}`)
+        console.error("")
+    }
+}
+
+function validateProjectName(name: string): string[] {
+    const errors: string[] = []
+
+    const directoryError = validateDirectoryName(name)
+    if (directoryError) errors.push(directoryError)
+
+    const packageErrors = validatePackageJsonName(name)
+    errors.push(...packageErrors)
+
+    return errors
+}
+
+function validateDirectoryName(name: string): string | null {
+    if (name === "." || name === "..") return "目录名不能是 . 或 ..。"
+
+    if (name !== path.basename(name)) return "目录名不能包含路径分隔符。"
+
+    if (/[<>:"/\\|?*]/.test(name) || hasAsciiControlChars(name)) return "目录名包含非法字符。"
+
+    if (/[. ]$/.test(name)) return "目录名不能以空格或点号结尾。"
+
+    if (WINDOWS_RESERVED_NAMES.test(name)) return "目录名是 Windows 保留名称。"
+
+    return null
+}
+
+function hasAsciiControlChars(input: string): boolean {
+    for (const char of input) {
+        const code = char.charCodeAt(0)
+        if (code >= 0 && code <= 31) return true
+    }
+
+    return false
+}
+
+function validatePackageJsonName(name: string): string[] {
+    const errors: string[] = []
+
+    const packageNamePattern = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/
+
+    if (name.length > 214) errors.push("package.json 的 name 长度不能超过 214 个字符。")
+
+    if (name.startsWith(".") || name.startsWith("_")) errors.push("package.json 的 name 不能以 . 或 _ 开头。")
+
+    if (/[A-Z]/.test(name)) errors.push("package.json 的 name 不能包含大写字母。")
+
+    if (NODE_CORE_MODULES.has(name)) errors.push("package.json 的 name 不能与内置模块/保留名冲突。")
+
+    if (!packageNamePattern.test(name)) errors.push("package.json 的 name 必须是 URL 友好的 npm 包名。")
+
+    return errors
+}
+
+async function assertTargetDirectoryAvailable(targetDir: string, projectName: string) {
+    try {
+        const stat = await fs.stat(targetDir)
+
+        if (!stat.isDirectory()) throw new Error(`路径 ${projectName} 已存在且不是目录。`)
+
+        const files = await fs.readdir(targetDir)
+
+        if (files.length === 0) {
+            throw new Error(`已存在同名空目录 "${projectName}"，请删除后再执行命令。`)
+        }
+
+        throw new Error(`已存在同名非空目录 "${projectName}"，无法继续创建。`)
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return
+
+        throw error
+    }
+}
+
+async function updatePackageName(projectDir: string, name: string) {
+    const packageJsonPath = path.join(projectDir, "package.json")
+    const content = await fs.readFile(packageJsonPath, "utf8")
+
+    let parsed: Record<string, unknown>
+
+    try {
+        parsed = JSON.parse(content) as Record<string, unknown>
+    } catch {
+        throw new Error("模板中的 package.json 不是有效 JSON。")
+    }
+
+    parsed.name = name
+    await fs.writeFile(packageJsonPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8")
+}
+
+async function runCommand(command: string, args: string[], cwd: string) {
+    const display = `${command} ${args.join(" ")}`
+    console.log(`\n> ${display}`)
+
+    await new Promise<void>((resolve, reject) => {
+        const child = spawn(command, args, {
+            cwd,
+            stdio: "inherit",
+        })
+
+        child.once("error", error => {
+            reject(error)
+        })
+
+        child.once("close", code => {
+            if (code === 0) {
+                resolve()
+                return
+            }
+
+            reject(new Error(`命令执行失败（退出码 ${code}）: ${display}`))
+        })
+    })
+}
+
+void main()

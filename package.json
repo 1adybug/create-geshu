@@ -1,0 +1,40 @@
+{
+    "name": "create-geshu",
+    "version": "0.1.0",
+    "description": "",
+    "main": "dist/index.js",
+    "bin": {
+        "create-geshu": "dist/index.js"
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "start": "node dist/index.js",
+        "format": "prettier --write .",
+        "fg": "npm run format && git add . && git commit -m \"✨feature: format\"",
+        "prepare": "husky",
+        "lint": "eslint ."
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "module",
+    "dependencies": {},
+    "devDependencies": {
+        "@1adybug/prettier": "^0.0.27",
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^24.10.13",
+        "eslint": "^10.0.2",
+        "globals": "^17.3.0",
+        "husky": "^9.1.7",
+        "lint-staged": "^16.2.7",
+        "prettier": "^3.8.1",
+        "typescript": "^5.8.3",
+        "typescript-eslint": "^8.56.1"
+    },
+    "lint-staged": {
+        "**/*": "prettier --write --ignore-unknown"
+    }
+}
