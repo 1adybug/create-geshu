@@ -22,17 +22,15 @@
     "license": "ISC",
     "type": "module",
     "devDependencies": {
+        "@1adybug/eslint": "^0.0.4",
         "@1adybug/prettier": "^0.0.27",
-        "@eslint/js": "^10.0.1",
         "@rslib/core": "^0.19.6",
         "@types/node": "^24.10.13",
-        "eslint": "^10.0.2",
-        "globals": "^17.3.0",
+        "eslint": "^9.39.3",
         "husky": "^9.1.7",
         "lint-staged": "^16.2.7",
         "prettier": "^3.8.1",
-        "typescript": "^5.8.3",
-        "typescript-eslint": "^8.56.1"
+        "typescript": "^5.8.3"
     },
     "lint-staged": {
         "**/*": "prettier --write --ignore-unknown"
