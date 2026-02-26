@@ -212,7 +212,7 @@ async function updatePackageName(projectDir: string, name: string) {
     }
 
     parsed.name = name
-    await fs.writeFile(packageJsonPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8")
+    await fs.writeFile(packageJsonPath, `${JSON.stringify(parsed, null, 4)}\n`, "utf8")
 }
 
 async function runCommand(command: string, args: string[], cwd: string) {
