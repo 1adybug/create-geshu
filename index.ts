@@ -2,6 +2,7 @@
 
 import { spawn } from "node:child_process"
 import { promises as fs } from "node:fs"
+import { isBuiltin } from "node:module"
 import path from "node:path"
 import process from "node:process"
 
@@ -38,26 +39,6 @@ const TEMPLATE_MAP: Record<ProjectType, TemplateConfig> = {
 const TEMPLATE_PUSH_BLOCKED_URL = "no_push://template"
 
 const WINDOWS_RESERVED_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
-const NODE_CORE_MODULES = new Set([
-    "node_modules",
-    "favicon.ico",
-    "http",
-    "https",
-    "stream",
-    "crypto",
-    "path",
-    "fs",
-    "url",
-    "util",
-    "os",
-    "net",
-    "tls",
-    "zlib",
-    "events",
-    "buffer",
-    "child_process",
-    "worker_threads",
-])
 
 async function main() {
     try {
@@ -211,7 +192,7 @@ function validatePackageJsonName(name: string): string[] {
 
     if (/[A-Z]/.test(name)) errors.push("package.json 的 name 不能包含大写字母。")
 
-    if (NODE_CORE_MODULES.has(name)) errors.push("package.json 的 name 不能与内置模块/保留名冲突。")
+    if (isBuiltin(name)) errors.push("package.json 的 name 不能与 Node.js 内置模块冲突。")
 
     if (!packageNamePattern.test(name)) errors.push("package.json 的 name 必须是 URL 友好的 npm 包名。")
 
