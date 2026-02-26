@@ -8,12 +8,7 @@ import process from "node:process"
 
 import { input, select } from "@inquirer/prompts"
 
-type ProjectType = "rsbuild" | "nextjs"
-
-interface TemplateConfig {
-    cloneUrl: string
-    label: string
-}
+type ProjectType = "Rsbuild" | "Next.js"
 
 interface CliOptions {
     projectType?: ProjectType
@@ -25,20 +20,16 @@ interface PackageJsonContent {
     [key: string]: unknown
 }
 
-const TEMPLATE_MAP: Record<ProjectType, TemplateConfig> = {
-    rsbuild: {
-        cloneUrl: "https://github.com/1adybug/geshu-rsbuild-template",
-        label: "Rsbuild",
-    },
-    nextjs: {
-        cloneUrl: "https://github.com/1adybug/geshu-next-template",
-        label: "Next.js",
-    },
+const TemplateMap: Record<ProjectType, string> = {
+    Rsbuild: "https://github.com/1adybug/geshu-rsbuild-template",
+    "Next.js": "https://github.com/1adybug/geshu-next-template",
 }
 
-const TEMPLATE_PUSH_BLOCKED_URL = "no_push://template"
+const ProjectTypeChoices: readonly ProjectType[] = ["Rsbuild", "Next.js"]
 
-const WINDOWS_RESERVED_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
+const TemplatePushBlockedUrl = "no_push://template"
+
+const WindowsReservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 
 async function main() {
     try {
@@ -53,12 +44,12 @@ async function main() {
 
         await assertTargetDirectoryAvailable(targetDir, projectName)
 
-        const template = TEMPLATE_MAP[projectType]
+        const templateCloneUrl = TemplateMap[projectType]
 
-        console.log(`\n开始创建项目: ${projectName} (${template.label})`)
-        await runCommand("git", ["clone", template.cloneUrl, projectName], process.cwd())
+        console.log(`\n开始创建项目: ${projectName} (${projectType})`)
+        await runCommand("git", ["clone", templateCloneUrl, projectName], process.cwd())
         await runCommand("git", ["remote", "rename", "origin", "template"], targetDir)
-        await runCommand("git", ["remote", "set-url", "--push", "template", TEMPLATE_PUSH_BLOCKED_URL], targetDir)
+        await runCommand("git", ["remote", "set-url", "--push", "template", TemplatePushBlockedUrl], targetDir)
         await updatePackageName(targetDir, projectName)
         await runCommand("git", ["add", "package.json"], targetDir)
         await runCommand("git", ["commit", "-m", "✨feature: init"], targetDir)
@@ -79,11 +70,11 @@ function parseCliOptions(args: string[]): CliOptions {
 
         if (current === "--type" || current === "-t") {
             const value = args[index + 1]
-            if (!value) throw new Error("参数 --type 缺少值，支持 rsbuild / nextjs。")
+            if (!value) throw new Error("参数 --type 缺少值，支持 Rsbuild / Next.js。")
 
             const parsed = normalizeProjectType(value)
 
-            if (!parsed) throw new Error(`参数 --type 无效: ${value}。支持 rsbuild / nextjs。`)
+            if (!parsed) throw new Error(`参数 --type 无效: ${value}。支持 Rsbuild / Next.js。`)
 
             options.projectType = parsed
             index += 1
@@ -106,9 +97,9 @@ function parseCliOptions(args: string[]): CliOptions {
 function normalizeProjectType(input: string): ProjectType | null {
     const value = input.trim().toLowerCase()
 
-    if (value === "rsbuild" || value === "1") return "rsbuild"
+    if (value === "rsbuild" || value === "1") return "Rsbuild"
 
-    if (value === "nextjs" || value === "next.js" || value === "next" || value === "2") return "nextjs"
+    if (value === "nextjs" || value === "next.js" || value === "next" || value === "2") return "Next.js"
 
     return null
 }
@@ -116,16 +107,7 @@ function normalizeProjectType(input: string): ProjectType | null {
 async function promptProjectType(): Promise<ProjectType> {
     return select<ProjectType>({
         message: "请选择项目类型:",
-        choices: [
-            {
-                name: "Rsbuild",
-                value: "rsbuild",
-            },
-            {
-                name: "Next.js",
-                value: "nextjs",
-            },
-        ],
+        choices: ProjectTypeChoices,
     })
 }
 
@@ -167,7 +149,7 @@ function validateDirectoryName(name: string): string | null {
 
     if (/[. ]$/.test(name)) return "目录名不能以空格或点号结尾。"
 
-    if (WINDOWS_RESERVED_NAMES.test(name)) return "目录名是 Windows 保留名称。"
+    if (WindowsReservedNames.test(name)) return "目录名是 Windows 保留名称。"
 
     return null
 }
