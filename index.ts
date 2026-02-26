@@ -1,17 +1,26 @@
-#!/usr/bin/env node
-
 import { spawn } from "node:child_process"
 import { promises as fs } from "node:fs"
 import path from "node:path"
 import process from "node:process"
-import { createInterface } from "node:readline/promises"
+
+import { input, select } from "@inquirer/prompts"
 
 type ProjectType = "rsbuild" | "nextjs"
 
-type TemplateConfig = {
+interface TemplateConfig {
     cloneUrl: string
     remoteUrl: string
     label: string
+}
+
+interface CliOptions {
+    projectType?: ProjectType
+    projectName?: string
+}
+
+interface PackageJsonContent {
+    name?: string
+    [key: string]: unknown
 }
 
 const TEMPLATE_MAP: Record<ProjectType, TemplateConfig> = {
@@ -50,20 +59,13 @@ const NODE_CORE_MODULES = new Set([
 ])
 
 async function main() {
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    })
-
     try {
         const options = parseCliOptions(process.argv.slice(2))
-        const projectType = options.projectType ?? (await promptProjectType(rl))
-        const projectName = options.projectName ?? (await promptProjectName(rl))
+        const projectType = options.projectType ?? (await promptProjectType())
+        const projectName = options.projectName ?? (await promptProjectName())
         const nameErrors = validateProjectName(projectName)
 
-        if (nameErrors.length > 0) {
-            throw new Error(`项目名称不合法:\n${nameErrors.map(item => `- ${item}`).join("\n")}`)
-        }
+        if (nameErrors.length > 0) throw new Error(`项目名称不合法:\n${nameErrors.map(item => `- ${item}`).join("\n")}`)
 
         const targetDir = path.resolve(process.cwd(), projectName)
 
@@ -83,16 +85,11 @@ async function main() {
         const message = error instanceof Error ? error.message : "未知错误，请重试。"
         console.error(`\n创建失败: ${message}`)
         process.exitCode = 1
-    } finally {
-        rl.close()
     }
 }
 
-function parseCliOptions(args: string[]): {
-    projectType?: ProjectType
-    projectName?: string
-} {
-    const options: { projectType?: ProjectType; projectName?: string } = {}
+function parseCliOptions(args: string[]): CliOptions {
+    const options: CliOptions = {}
 
     for (let index = 0; index < args.length; index += 1) {
         const current = args[index]
@@ -103,9 +100,7 @@ function parseCliOptions(args: string[]): {
 
             const parsed = normalizeProjectType(value)
 
-            if (!parsed) {
-                throw new Error(`参数 --type 无效: ${value}。支持 rsbuild / nextjs。`)
-            }
+            if (!parsed) throw new Error(`参数 --type 无效: ${value}。支持 rsbuild / nextjs。`)
 
             options.projectType = parsed
             index += 1
@@ -135,35 +130,37 @@ function normalizeProjectType(input: string): ProjectType | null {
     return null
 }
 
-async function promptProjectType(rl: ReturnType<typeof createInterface>): Promise<ProjectType> {
-    while (true) {
-        const answer = (await rl.question(["请选择项目类型:", "1. Rsbuild", "2. Next.js", "请输入序号 (1/2): "].join("\n"))).trim()
-
-        if (answer === "1") return "rsbuild"
-
-        if (answer === "2") return "nextjs"
-
-        console.error("输入无效，请输入 1 或 2。")
-    }
+async function promptProjectType(): Promise<ProjectType> {
+    return select<ProjectType>({
+        message: "请选择项目类型:",
+        choices: [
+            {
+                name: "Rsbuild",
+                value: "rsbuild",
+            },
+            {
+                name: "Next.js",
+                value: "nextjs",
+            },
+        ],
+    })
 }
 
-async function promptProjectName(rl: ReturnType<typeof createInterface>): Promise<string> {
-    while (true) {
-        const answer = (await rl.question("请输入项目名称: ")).trim()
+async function promptProjectName(): Promise<string> {
+    const answer = await input({
+        message: "请输入项目名称:",
+        validate: value => {
+            const name = value.trim()
+            if (!name) return "项目名称不能为空。"
 
-        if (!answer) {
-            console.error("项目名称不能为空。")
-            continue
-        }
+            const errors = validateProjectName(name)
+            if (errors.length === 0) return true
 
-        const errors = validateProjectName(answer)
+            return `项目名称不合法: ${errors.join("；")}`
+        },
+    })
 
-        if (errors.length === 0) return answer
-
-        console.error("\n项目名称不合法:")
-        for (const item of errors) console.error(`- ${item}`)
-        console.error("")
-    }
+    return answer.trim()
 }
 
 function validateProjectName(name: string): string[] {
@@ -227,9 +224,7 @@ async function assertTargetDirectoryAvailable(targetDir: string, projectName: st
 
         const files = await fs.readdir(targetDir)
 
-        if (files.length === 0) {
-            throw new Error(`已存在同名空目录 "${projectName}"，请删除后再执行命令。`)
-        }
+        if (files.length === 0) throw new Error(`已存在同名空目录 "${projectName}"，请删除后再执行命令。`)
 
         throw new Error(`已存在同名非空目录 "${projectName}"，无法继续创建。`)
     } catch (error) {
@@ -243,10 +238,10 @@ async function updatePackageName(projectDir: string, name: string) {
     const packageJsonPath = path.join(projectDir, "package.json")
     const content = await fs.readFile(packageJsonPath, "utf8")
 
-    let parsed: Record<string, unknown>
+    let parsed: PackageJsonContent
 
     try {
-        parsed = JSON.parse(content) as Record<string, unknown>
+        parsed = JSON.parse(content) as PackageJsonContent
     } catch {
         throw new Error("模板中的 package.json 不是有效 JSON。")
     }
