@@ -11,7 +11,6 @@ type ProjectType = "rsbuild" | "nextjs"
 
 interface TemplateConfig {
     cloneUrl: string
-    remoteUrl: string
     label: string
 }
 
@@ -28,15 +27,15 @@ interface PackageJsonContent {
 const TEMPLATE_MAP: Record<ProjectType, TemplateConfig> = {
     rsbuild: {
         cloneUrl: "https://github.com/1adybug/geshu-rsbuild-template",
-        remoteUrl: "https://github.com/1adybug/geshu-rsbuild-template.git",
         label: "Rsbuild",
     },
     nextjs: {
         cloneUrl: "https://github.com/1adybug/geshu-next-template",
-        remoteUrl: "https://github.com/1adybug/geshu-next-template.git",
         label: "Next.js",
     },
 }
+
+const TEMPLATE_PUSH_BLOCKED_URL = "no_push://template"
 
 const WINDOWS_RESERVED_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 const NODE_CORE_MODULES = new Set([
@@ -77,7 +76,8 @@ async function main() {
 
         console.log(`\n开始创建项目: ${projectName} (${template.label})`)
         await runCommand("git", ["clone", template.cloneUrl, projectName], process.cwd())
-        await runCommand("git", ["remote", "add", "template", template.remoteUrl], targetDir)
+        await runCommand("git", ["remote", "rename", "origin", "template"], targetDir)
+        await runCommand("git", ["remote", "set-url", "--push", "template", TEMPLATE_PUSH_BLOCKED_URL], targetDir)
         await updatePackageName(targetDir, projectName)
         await runCommand("git", ["add", "package.json"], targetDir)
         await runCommand("git", ["commit", "-m", "✨feature: init"], targetDir)
