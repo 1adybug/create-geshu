@@ -8,7 +8,7 @@ import process from "node:process"
 
 import { input, select } from "@inquirer/prompts"
 
-type ProjectType = "Rsbuild" | "Next.js"
+type ProjectType = "Rsbuild" | "Next.js" | "Electron"
 
 interface CliOptions {
     projectType?: ProjectType
@@ -23,9 +23,10 @@ interface PackageJsonContent {
 const TemplateMap: Record<ProjectType, string> = {
     Rsbuild: "https://github.com/1adybug/geshu-rsbuild-template",
     "Next.js": "https://github.com/1adybug/geshu-next-template",
+    Electron: "https://github.com/1adybug/geshu-electron-template",
 }
 
-const ProjectTypeChoices: readonly ProjectType[] = ["Rsbuild", "Next.js"]
+const ProjectTypeChoices: readonly ProjectType[] = ["Rsbuild", "Next.js", "Electron"]
 
 const TemplatePushBlockedUrl = "no_push://template"
 
@@ -70,11 +71,11 @@ function parseCliOptions(args: string[]): CliOptions {
 
         if (current === "--type" || current === "-t") {
             const value = args[index + 1]
-            if (!value) throw new Error("参数 --type 缺少值，支持 Rsbuild / Next.js。")
+            if (!value) throw new Error("参数 --type 缺少值，支持 Rsbuild / Next.js / Electron。")
 
             const parsed = normalizeProjectType(value)
 
-            if (!parsed) throw new Error(`参数 --type 无效: ${value}。支持 Rsbuild / Next.js。`)
+            if (!parsed) throw new Error(`参数 --type 无效: ${value}。支持 Rsbuild / Next.js / Electron。`)
 
             options.projectType = parsed
             index += 1
@@ -100,6 +101,8 @@ function normalizeProjectType(input: string): ProjectType | null {
     if (value === "rsbuild" || value === "1") return "Rsbuild"
 
     if (value === "nextjs" || value === "next.js" || value === "next" || value === "2") return "Next.js"
+
+    if (value === "electron" || value === "3") return "Electron"
 
     return null
 }
