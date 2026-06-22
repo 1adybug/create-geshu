@@ -53,7 +53,7 @@ async function main() {
         await runCommand("git", ["remote", "set-url", "--push", "template", TemplatePushBlockedUrl], targetDir)
         await updatePackageName(targetDir, projectName)
         await runCommand("git", ["add", "package.json"], targetDir)
-        await runCommand("git", ["commit", "--no-verify", "-m", "✨feature: init"], targetDir)
+        await runCommand("git", ["commit", "--no-verify", "-m", "feat: init"], targetDir)
 
         console.log(`\n创建完成: ${projectName}`)
     } catch (error) {
