@@ -32,6 +32,8 @@ const TemplatePushBlockedUrl = "no_push://template"
 
 const WindowsReservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 
+const NextJsGitignoreEntriesToRemove = ["prisma/migrations"]
+
 async function main() {
     try {
         const options = parseCliOptions(process.argv.slice(2))
@@ -52,7 +54,15 @@ async function main() {
         await runCommand("git", ["remote", "rename", "origin", "template"], targetDir)
         await runCommand("git", ["remote", "set-url", "--push", "template", TemplatePushBlockedUrl], targetDir)
         await updatePackageName(targetDir, projectName)
-        await runCommand("git", ["add", "package.json"], targetDir)
+
+        const initCommitFiles = ["package.json"]
+
+        if (projectType === "Next.js") {
+            const didUpdateGitignore = await removeGitignoreEntries(targetDir, NextJsGitignoreEntriesToRemove)
+            if (didUpdateGitignore) initCommitFiles.push(".gitignore")
+        }
+
+        await runCommand("git", ["add", ...initCommitFiles], targetDir)
         await runCommand("git", ["commit", "--no-verify", "-m", "feat: init"], targetDir)
 
         console.log(`\n创建完成: ${projectName}`)
@@ -216,6 +226,30 @@ async function updatePackageName(projectDir: string, name: string) {
 
     parsed.name = name
     await fs.writeFile(packageJsonPath, `${JSON.stringify(parsed, null, 4)}\n`, "utf8")
+}
+
+async function removeGitignoreEntries(projectDir: string, entries: string[]): Promise<boolean> {
+    const gitignorePath = path.join(projectDir, ".gitignore")
+    let content: string
+
+    try {
+        content = await fs.readFile(gitignorePath, "utf8")
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
+
+        throw error
+    }
+
+    const entriesToRemove = new Set(entries)
+    const lines = content.split(/\r?\n/)
+    const filteredLines = lines.filter(line => !entriesToRemove.has(line.trim()))
+
+    if (filteredLines.length === lines.length) return false
+
+    const newline = content.includes("\r\n") ? "\r\n" : "\n"
+    await fs.writeFile(gitignorePath, filteredLines.join(newline), "utf8")
+
+    return true
 }
 
 async function runCommand(command: string, args: string[], cwd: string) {
