@@ -34,6 +34,8 @@ const WindowsReservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 
 const NextJsGitignoreEntriesToRemove = ["prisma/migrations"]
 
+const NextJsPrismaMigrationDirectory = "prisma/migrations"
+
 async function main() {
     try {
         const options = parseCliOptions(process.argv.slice(2))
@@ -60,6 +62,9 @@ async function main() {
         if (projectType === "Next.js") {
             const didUpdateGitignore = await removeGitignoreEntries(targetDir, NextJsGitignoreEntriesToRemove)
             if (didUpdateGitignore) initCommitFiles.push(".gitignore")
+
+            const didCreateMigrationDirectory = await initializeNextJsPrismaMigration(targetDir)
+            if (didCreateMigrationDirectory) initCommitFiles.push(NextJsPrismaMigrationDirectory)
         }
 
         await runCommand("git", ["add", ...initCommitFiles], targetDir)
@@ -252,13 +257,41 @@ async function removeGitignoreEntries(projectDir: string, entries: string[]): Pr
     return true
 }
 
-async function runCommand(command: string, args: string[], cwd: string) {
+async function initializeNextJsPrismaMigration(projectDir: string): Promise<boolean> {
+    await runCommand(getNpxCommand(), ["--yes", "prisma", "migrate", "dev", "--name", "init", "--create-only"], projectDir, {
+        env: { NODE_ENV: "development" },
+    })
+
+    return pathExists(path.join(projectDir, NextJsPrismaMigrationDirectory))
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+    try {
+        await fs.access(targetPath)
+        return true
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
+
+        throw error
+    }
+}
+
+function getNpxCommand(): string {
+    return process.platform === "win32" ? "npx.cmd" : "npx"
+}
+
+interface RunCommandOptions {
+    env?: NodeJS.ProcessEnv
+}
+
+async function runCommand(command: string, args: string[], cwd: string, options: RunCommandOptions = {}) {
     const display = `${command} ${args.join(" ")}`
     console.log(`\n> ${display}`)
 
     await new Promise<void>((resolve, reject) => {
         const child = spawn(command, args, {
             cwd,
+            env: options.env ? { ...process.env, ...options.env } : process.env,
             stdio: "inherit",
         })
 
