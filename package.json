@@ -22,15 +22,15 @@
     "license": "ISC",
     "type": "module",
     "devDependencies": {
-        "@1adybug/eslint": "^0.0.4",
-        "@1adybug/prettier": "^0.0.27",
-        "@rslib/core": "^0.19.6",
-        "@types/node": "^24.10.13",
-        "eslint": "^9.39.3",
+        "@1adybug/eslint": "^0.0.12",
+        "@1adybug/prettier": "^0.0.31",
+        "@rslib/core": "^0.23.2",
+        "@types/node": "^26.1.1",
+        "eslint": "^9.39.5",
         "husky": "^9.1.7",
-        "lint-staged": "^16.2.7",
-        "prettier": "^3.8.1",
-        "typescript": "^5.8.3"
+        "lint-staged": "^17.0.8",
+        "prettier": "^3.9.5",
+        "typescript": "^6.0.3"
     },
     "lint-staged": {
         "**/*": "prettier --write --ignore-unknown"

@@ -258,7 +258,7 @@ async function removeGitignoreEntries(projectDir: string, entries: string[]): Pr
 }
 
 async function initializeNextJsPrismaMigration(projectDir: string): Promise<boolean> {
-    await runCommand(getNpxCommand(), ["--yes", "prisma", "migrate", "dev", "--name", "init", "--create-only"], projectDir, {
+    await runCommand("npx", ["--yes", "prisma", "migrate", "dev", "--name", "init", "--create-only"], projectDir, {
         env: { NODE_ENV: "development" },
     })
 
@@ -274,10 +274,6 @@ async function pathExists(targetPath: string): Promise<boolean> {
 
         throw error
     }
-}
-
-function getNpxCommand(): string {
-    return process.platform === "win32" ? "npx.cmd" : "npx"
 }
 
 interface RunCommandOptions {
