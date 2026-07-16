@@ -8,7 +8,7 @@ import process from "node:process"
 
 import { input, select } from "@inquirer/prompts"
 
-type ProjectType = "Rsbuild" | "Next.js" | "Electron"
+type ProjectType = "Rsbuild" | "Next.js" | "Electron" | "Rsbuild + shadcn/ui + Tailwind CSS v4" | "Next.js + shadcn/ui + Tailwind CSS v4"
 
 interface CliOptions {
     projectType?: ProjectType
@@ -24,9 +24,19 @@ const TemplateMap: Record<ProjectType, string> = {
     Rsbuild: "https://github.com/1adybug/geshu-rsbuild-template",
     "Next.js": "https://github.com/1adybug/geshu-next-template",
     Electron: "https://github.com/1adybug/geshu-electron-template",
+    "Rsbuild + shadcn/ui + Tailwind CSS v4": "https://github.com/1adybug/geshu-shadcn-template",
+    "Next.js + shadcn/ui + Tailwind CSS v4": "https://github.com/1adybug/geshu-next-shadcn-template.git",
 }
 
-const ProjectTypeChoices: readonly ProjectType[] = ["Rsbuild", "Next.js", "Electron"]
+const ProjectTypeChoices: readonly ProjectType[] = [
+    "Rsbuild",
+    "Next.js",
+    "Electron",
+    "Rsbuild + shadcn/ui + Tailwind CSS v4",
+    "Next.js + shadcn/ui + Tailwind CSS v4",
+]
+
+const SupportedProjectTypes = ProjectTypeChoices.join(" / ")
 
 const TemplatePushBlockedUrl = "no_push://template"
 
@@ -59,7 +69,7 @@ async function main() {
 
         const initCommitFiles = ["package.json"]
 
-        if (projectType === "Next.js") {
+        if (isNextJsProjectType(projectType)) {
             const didUpdateGitignore = await removeGitignoreEntries(targetDir, NextJsGitignoreEntriesToRemove)
             if (didUpdateGitignore) initCommitFiles.push(".gitignore")
 
@@ -86,11 +96,11 @@ function parseCliOptions(args: string[]): CliOptions {
 
         if (current === "--type" || current === "-t") {
             const value = args[index + 1]
-            if (!value) throw new Error("参数 --type 缺少值，支持 Rsbuild / Next.js / Electron。")
+            if (!value) throw new Error(`参数 --type 缺少值，支持 ${SupportedProjectTypes}。`)
 
             const parsed = normalizeProjectType(value)
 
-            if (!parsed) throw new Error(`参数 --type 无效: ${value}。支持 Rsbuild / Next.js / Electron。`)
+            if (!parsed) throw new Error(`参数 --type 无效: ${value}。支持 ${SupportedProjectTypes}。`)
 
             options.projectType = parsed
             index += 1
@@ -119,7 +129,17 @@ function normalizeProjectType(input: string): ProjectType | null {
 
     if (value === "electron" || value === "3") return "Electron"
 
+    if (value === "rsbuild-shadcn" || value === "shadcn-rsbuild" || value === "rsbuild + shadcn/ui + tailwind css v4" || value === "4")
+        return "Rsbuild + shadcn/ui + Tailwind CSS v4"
+
+    if (value === "next-shadcn" || value === "nextjs-shadcn" || value === "shadcn-next" || value === "next.js + shadcn/ui + tailwind css v4" || value === "5")
+        return "Next.js + shadcn/ui + Tailwind CSS v4"
+
     return null
+}
+
+function isNextJsProjectType(projectType: ProjectType): boolean {
+    return projectType === "Next.js" || projectType === "Next.js + shadcn/ui + Tailwind CSS v4"
 }
 
 async function promptProjectType(): Promise<ProjectType> {
