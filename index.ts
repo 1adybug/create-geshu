@@ -46,6 +46,8 @@ const NextJsGitignoreEntriesToRemove = ["prisma/migrations"]
 
 const NextJsPrismaMigrationDirectory = "prisma/migrations"
 
+const ShadcnMigrationDocument = "SHADCN_TAILWIND_V4_MIGRATION.md"
+
 async function main() {
     try {
         const options = parseCliOptions(process.argv.slice(2))
@@ -68,6 +70,11 @@ async function main() {
         await updatePackageName(targetDir, projectName)
 
         const initCommitFiles = ["package.json"]
+
+        if (isShadcnProjectType(projectType)) {
+            const didRemoveMigrationDocument = await removeProjectFile(targetDir, ShadcnMigrationDocument)
+            if (didRemoveMigrationDocument) initCommitFiles.push(ShadcnMigrationDocument)
+        }
 
         if (isNextJsProjectType(projectType)) {
             const didUpdateGitignore = await removeGitignoreEntries(targetDir, NextJsGitignoreEntriesToRemove)
@@ -140,6 +147,10 @@ function normalizeProjectType(input: string): ProjectType | null {
 
 function isNextJsProjectType(projectType: ProjectType): boolean {
     return projectType === "Next.js" || projectType === "Next.js + shadcn/ui + Tailwind CSS v4"
+}
+
+function isShadcnProjectType(projectType: ProjectType): boolean {
+    return projectType === "Rsbuild + shadcn/ui + Tailwind CSS v4" || projectType === "Next.js + shadcn/ui + Tailwind CSS v4"
 }
 
 async function promptProjectType(): Promise<ProjectType> {
@@ -251,6 +262,17 @@ async function updatePackageName(projectDir: string, name: string) {
 
     parsed.name = name
     await fs.writeFile(packageJsonPath, `${JSON.stringify(parsed, null, 4)}\n`, "utf8")
+}
+
+async function removeProjectFile(projectDir: string, relativePath: string): Promise<boolean> {
+    try {
+        await fs.unlink(path.join(projectDir, relativePath))
+        return true
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
+
+        throw error
+    }
 }
 
 async function removeGitignoreEntries(projectDir: string, entries: string[]): Promise<boolean> {
