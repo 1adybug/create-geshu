@@ -24,7 +24,7 @@ const TemplateMap: Record<ProjectType, string> = {
     Rsbuild: "https://github.com/1adybug/geshu-rsbuild-template",
     "Next.js": "https://github.com/1adybug/geshu-next-template",
     Electron: "https://github.com/1adybug/geshu-electron-template",
-    "Rsbuild + shadcn/ui + Tailwind CSS v4": "https://github.com/1adybug/geshu-shadcn-template",
+    "Rsbuild + shadcn/ui + Tailwind CSS v4": "https://github.com/1adybug/geshu-rsbuild-shadcn-template",
     "Next.js + shadcn/ui + Tailwind CSS v4": "https://github.com/1adybug/geshu-next-shadcn-template.git",
 }
 
