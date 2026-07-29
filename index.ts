@@ -8,11 +8,20 @@ import process from "node:process"
 
 import { input, select } from "@inquirer/prompts"
 
-type ProjectType = "Rsbuild" | "Next.js" | "Electron" | "Rsbuild + shadcn/ui + Tailwind CSS v4" | "Next.js + shadcn/ui + Tailwind CSS v4"
+type ProjectType = "rsbuild" | "nextjs" | "electron" | "rsbuild-shadcn" | "nextjs-shadcn" | "nextjs-shadcn-t3"
 
 interface CliOptions {
     projectType?: ProjectType
     projectName?: string
+}
+
+interface TemplateDefinition {
+    type: ProjectType
+    displayName: string
+    cloneUrl: string
+    aliases: readonly string[]
+    isNextJs: boolean
+    isShadcn: boolean
 }
 
 interface PackageJsonContent {
@@ -20,23 +29,58 @@ interface PackageJsonContent {
     [key: string]: unknown
 }
 
-const TemplateMap: Record<ProjectType, string> = {
-    Rsbuild: "https://github.com/1adybug/geshu-rsbuild-template",
-    "Next.js": "https://github.com/1adybug/geshu-next-template",
-    Electron: "https://github.com/1adybug/geshu-electron-template",
-    "Rsbuild + shadcn/ui + Tailwind CSS v4": "https://github.com/1adybug/geshu-rsbuild-shadcn-template",
-    "Next.js + shadcn/ui + Tailwind CSS v4": "https://github.com/1adybug/geshu-next-shadcn-template.git",
-}
-
-const ProjectTypeChoices: readonly ProjectType[] = [
-    "Rsbuild",
-    "Next.js",
-    "Electron",
-    "Rsbuild + shadcn/ui + Tailwind CSS v4",
-    "Next.js + shadcn/ui + Tailwind CSS v4",
+const TemplateDefinitions: readonly TemplateDefinition[] = [
+    {
+        type: "rsbuild",
+        displayName: "Rsbuild + Ant Design + Tailwind CSS v3",
+        cloneUrl: "https://github.com/1adybug/geshu-rsbuild-template",
+        aliases: ["rsbuild", "1"],
+        isNextJs: false,
+        isShadcn: false,
+    },
+    {
+        type: "nextjs",
+        displayName: "Next.js + Ant Design + Tailwind CSS v3",
+        cloneUrl: "https://github.com/1adybug/geshu-next-template",
+        aliases: ["nextjs", "next.js", "next", "2"],
+        isNextJs: true,
+        isShadcn: false,
+    },
+    {
+        type: "electron",
+        displayName: "Electron + Ant Design + Tailwind CSS v3",
+        cloneUrl: "https://github.com/1adybug/geshu-electron-template",
+        aliases: ["electron", "3"],
+        isNextJs: false,
+        isShadcn: false,
+    },
+    {
+        type: "rsbuild-shadcn",
+        displayName: "Rsbuild + shadcn/ui + Tailwind CSS v4",
+        cloneUrl: "https://github.com/1adybug/geshu-rsbuild-shadcn-template",
+        aliases: ["rsbuild-shadcn", "shadcn-rsbuild", "4"],
+        isNextJs: false,
+        isShadcn: true,
+    },
+    {
+        type: "nextjs-shadcn",
+        displayName: "Next.js + shadcn/ui + Tailwind CSS v4",
+        cloneUrl: "https://github.com/1adybug/geshu-next-shadcn-template.git",
+        aliases: ["next-shadcn", "nextjs-shadcn", "shadcn-next", "5"],
+        isNextJs: true,
+        isShadcn: true,
+    },
+    {
+        type: "nextjs-shadcn-t3",
+        displayName: "Next.js + shadcn/ui + Tailwind CSS v3",
+        cloneUrl: "https://github.com/1adybug/geshu-next-shadcn-t3-template.git",
+        aliases: ["next-shadcn-t3", "nextjs-shadcn-t3", "shadcn-next-t3", "6"],
+        isNextJs: true,
+        isShadcn: true,
+    },
 ]
 
-const SupportedProjectTypes = ProjectTypeChoices.join(" / ")
+const SupportedProjectTypes = TemplateDefinitions.map(template => template.displayName).join(" / ")
 
 const TemplatePushBlockedUrl = "no_push://template"
 
@@ -61,22 +105,22 @@ async function main() {
 
         await assertTargetDirectoryAvailable(targetDir, projectName)
 
-        const templateCloneUrl = TemplateMap[projectType]
+        const template = getTemplateDefinition(projectType)
 
-        console.log(`\n开始创建项目: ${projectName} (${projectType})`)
-        await runCommand("git", ["clone", templateCloneUrl, projectName], process.cwd())
+        console.log(`\n开始创建项目: ${projectName} (${template.displayName})`)
+        await runCommand("git", ["clone", template.cloneUrl, projectName], process.cwd())
         await runCommand("git", ["remote", "rename", "origin", "template"], targetDir)
         await runCommand("git", ["remote", "set-url", "--push", "template", TemplatePushBlockedUrl], targetDir)
         await updatePackageName(targetDir, projectName)
 
         const initCommitFiles = ["package.json"]
 
-        if (isShadcnProjectType(projectType)) {
+        if (template.isShadcn) {
             const didRemoveMigrationDocument = await removeProjectFile(targetDir, ShadcnMigrationDocument)
             if (didRemoveMigrationDocument) initCommitFiles.push(ShadcnMigrationDocument)
         }
 
-        if (isNextJsProjectType(projectType)) {
+        if (template.isNextJs) {
             const didUpdateGitignore = await removeGitignoreEntries(targetDir, NextJsGitignoreEntriesToRemove)
             if (didUpdateGitignore) initCommitFiles.push(".gitignore")
 
@@ -129,34 +173,25 @@ function parseCliOptions(args: string[]): CliOptions {
 
 function normalizeProjectType(input: string): ProjectType | null {
     const value = input.trim().toLowerCase()
+    const template = TemplateDefinitions.find(item => item.displayName.toLowerCase() === value || item.aliases.some(alias => alias === value))
 
-    if (value === "rsbuild" || value === "1") return "Rsbuild"
-
-    if (value === "nextjs" || value === "next.js" || value === "next" || value === "2") return "Next.js"
-
-    if (value === "electron" || value === "3") return "Electron"
-
-    if (value === "rsbuild-shadcn" || value === "shadcn-rsbuild" || value === "rsbuild + shadcn/ui + tailwind css v4" || value === "4")
-        return "Rsbuild + shadcn/ui + Tailwind CSS v4"
-
-    if (value === "next-shadcn" || value === "nextjs-shadcn" || value === "shadcn-next" || value === "next.js + shadcn/ui + tailwind css v4" || value === "5")
-        return "Next.js + shadcn/ui + Tailwind CSS v4"
-
-    return null
+    return template?.type ?? null
 }
 
-function isNextJsProjectType(projectType: ProjectType): boolean {
-    return projectType === "Next.js" || projectType === "Next.js + shadcn/ui + Tailwind CSS v4"
-}
+function getTemplateDefinition(projectType: ProjectType): TemplateDefinition {
+    const template = TemplateDefinitions.find(item => item.type === projectType)
+    if (!template) throw new Error(`未知项目类型: ${projectType}`)
 
-function isShadcnProjectType(projectType: ProjectType): boolean {
-    return projectType === "Rsbuild + shadcn/ui + Tailwind CSS v4" || projectType === "Next.js + shadcn/ui + Tailwind CSS v4"
+    return template
 }
 
 async function promptProjectType(): Promise<ProjectType> {
     return select<ProjectType>({
         message: "请选择项目类型:",
-        choices: ProjectTypeChoices,
+        choices: TemplateDefinitions.map(template => ({
+            name: template.displayName,
+            value: template.type,
+        })),
     })
 }
 
