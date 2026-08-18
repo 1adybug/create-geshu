@@ -8,20 +8,40 @@ import process from "node:process"
 
 import { input, select } from "@inquirer/prompts"
 
-type ProjectType = "rsbuild" | "nextjs" | "electron" | "rsbuild-shadcn" | "nextjs-shadcn" | "nextjs-shadcn-t3"
+type Framework = "nextjs" | "hono" | "rsbuild" | "electron"
+
+type UiLibrary = "antd" | "shadcn"
+
+type TailwindVersion = "3" | "4"
+
+type ProjectType =
+
+        | "nextjs"
+        | "nextjs-shadcn"
+        | "nextjs-shadcn-t3"
+        | "hono-shadcn"
+        | "hono-shadcn-t3"
+        | "rsbuild"
+        | "rsbuild-shadcn"
+        | "rsbuild-shadcn-t3"
+        | "electron"
+        | "electron-shadcn"
 
 interface CliOptions {
     projectType?: ProjectType
     projectName?: string
+    framework?: Framework
+    uiLibrary?: UiLibrary
+    tailwindVersion?: TailwindVersion
 }
 
 interface TemplateDefinition {
     type: ProjectType
-    displayName: string
+    framework: Framework
+    uiLibrary: UiLibrary
+    tailwindVersion: TailwindVersion
     cloneUrl: string
     aliases: readonly string[]
-    isNextJs: boolean
-    isShadcn: boolean
 }
 
 interface PackageJsonContent {
@@ -32,55 +52,110 @@ interface PackageJsonContent {
 const TemplateDefinitions: readonly TemplateDefinition[] = [
     {
         type: "rsbuild",
-        displayName: "Rsbuild + Ant Design + Tailwind CSS v3",
+        framework: "rsbuild",
+        uiLibrary: "antd",
+        tailwindVersion: "3",
         cloneUrl: "https://github.com/1adybug/geshu-rsbuild-template",
         aliases: ["rsbuild", "1"],
-        isNextJs: false,
-        isShadcn: false,
     },
     {
         type: "nextjs",
-        displayName: "Next.js + Ant Design + Tailwind CSS v3",
+        framework: "nextjs",
+        uiLibrary: "antd",
+        tailwindVersion: "3",
         cloneUrl: "https://github.com/1adybug/geshu-next-template",
         aliases: ["nextjs", "next.js", "next", "2"],
-        isNextJs: true,
-        isShadcn: false,
     },
     {
         type: "electron",
-        displayName: "Electron + Ant Design + Tailwind CSS v3",
+        framework: "electron",
+        uiLibrary: "antd",
+        tailwindVersion: "3",
         cloneUrl: "https://github.com/1adybug/geshu-electron-template",
         aliases: ["electron", "3"],
-        isNextJs: false,
-        isShadcn: false,
     },
     {
         type: "rsbuild-shadcn",
-        displayName: "Rsbuild + shadcn/ui + Tailwind CSS v4",
+        framework: "rsbuild",
+        uiLibrary: "shadcn",
+        tailwindVersion: "4",
         cloneUrl: "https://github.com/1adybug/geshu-rsbuild-shadcn-template",
         aliases: ["rsbuild-shadcn", "shadcn-rsbuild", "4"],
-        isNextJs: false,
-        isShadcn: true,
     },
     {
         type: "nextjs-shadcn",
-        displayName: "Next.js + shadcn/ui + Tailwind CSS v4",
+        framework: "nextjs",
+        uiLibrary: "shadcn",
+        tailwindVersion: "4",
         cloneUrl: "https://github.com/1adybug/geshu-next-shadcn-template.git",
         aliases: ["next-shadcn", "nextjs-shadcn", "shadcn-next", "5"],
-        isNextJs: true,
-        isShadcn: true,
     },
     {
         type: "nextjs-shadcn-t3",
-        displayName: "Next.js + shadcn/ui + Tailwind CSS v3",
+        framework: "nextjs",
+        uiLibrary: "shadcn",
+        tailwindVersion: "3",
         cloneUrl: "https://github.com/1adybug/geshu-next-shadcn-t3-template.git",
         aliases: ["next-shadcn-t3", "nextjs-shadcn-t3", "shadcn-next-t3", "6"],
-        isNextJs: true,
-        isShadcn: true,
+    },
+    {
+        type: "rsbuild-shadcn-t3",
+        framework: "rsbuild",
+        uiLibrary: "shadcn",
+        tailwindVersion: "3",
+        cloneUrl: "https://github.com/1adybug/geshu-rsbuild-shadcn-t3-template.git",
+        aliases: ["rsbuild-shadcn-t3", "shadcn-rsbuild-t3", "7"],
+    },
+    {
+        type: "hono-shadcn",
+        framework: "hono",
+        uiLibrary: "shadcn",
+        tailwindVersion: "4",
+        cloneUrl: "https://github.com/1adybug/geshu-hono-shadcn-template.git",
+        aliases: ["hono-shadcn", "shadcn-hono", "8"],
+    },
+    {
+        type: "hono-shadcn-t3",
+        framework: "hono",
+        uiLibrary: "shadcn",
+        tailwindVersion: "3",
+        cloneUrl: "https://github.com/1adybug/geshu-hono-shadcn-t3-template.git",
+        aliases: ["hono-shadcn-t3", "shadcn-hono-t3", "9"],
+    },
+    {
+        type: "electron-shadcn",
+        framework: "electron",
+        uiLibrary: "shadcn",
+        tailwindVersion: "4",
+        cloneUrl: "https://github.com/1adybug/geshu-electron-shadcn-template.git",
+        aliases: ["electron-shadcn", "shadcn-electron", "10"],
     },
 ]
 
-const SupportedProjectTypes = TemplateDefinitions.map(template => template.displayName).join(" / ")
+const FrameworkLabels: Record<Framework, string> = {
+    nextjs: "Next.js",
+    hono: "Hono",
+    rsbuild: "Rsbuild",
+    electron: "Electron",
+}
+
+const UiLibraryLabels: Record<UiLibrary, string> = {
+    antd: "Ant Design",
+    shadcn: "Shadcn",
+}
+
+const TailwindVersionLabels: Record<TailwindVersion, string> = {
+    "3": "TailwindCSS 3",
+    "4": "TailwindCSS 4",
+}
+
+const FrameworkOrder: readonly Framework[] = ["nextjs", "hono", "rsbuild", "electron"]
+
+const UiLibraryOrder: readonly UiLibrary[] = ["antd", "shadcn"]
+
+const TailwindVersionOrder: readonly TailwindVersion[] = ["3", "4"]
+
+const SupportedProjectTypes = TemplateDefinitions.map(template => template.type).join(" / ")
 
 const TemplatePushBlockedUrl = "no_push://template"
 
@@ -95,7 +170,7 @@ const ShadcnMigrationDocument = "SHADCN_TAILWIND_V4_MIGRATION.md"
 async function main() {
     try {
         const options = parseCliOptions(process.argv.slice(2))
-        const projectType = options.projectType ?? (await promptProjectType())
+        const template = options.projectType ? getTemplateDefinition(options.projectType) : await selectTemplate(options)
         const projectName = options.projectName ?? (await promptProjectName())
         const nameErrors = validateProjectName(projectName)
 
@@ -105,9 +180,7 @@ async function main() {
 
         await assertTargetDirectoryAvailable(targetDir, projectName)
 
-        const template = getTemplateDefinition(projectType)
-
-        console.log(`\n开始创建项目: ${projectName} (${template.displayName})`)
+        console.log(`\n开始创建项目: ${projectName} (${getTemplateDisplayName(template)})`)
         await runCommand("git", ["clone", template.cloneUrl, projectName], process.cwd())
         await runCommand("git", ["remote", "rename", "origin", "template"], targetDir)
         await runCommand("git", ["remote", "set-url", "--push", "template", TemplatePushBlockedUrl], targetDir)
@@ -115,12 +188,12 @@ async function main() {
 
         const initCommitFiles = ["package.json"]
 
-        if (template.isShadcn) {
+        if (template.uiLibrary === "shadcn") {
             const didRemoveMigrationDocument = await removeProjectFile(targetDir, ShadcnMigrationDocument)
             if (didRemoveMigrationDocument) initCommitFiles.push(ShadcnMigrationDocument)
         }
 
-        if (template.isNextJs) {
+        if (template.framework === "nextjs") {
             const didUpdateGitignore = await removeGitignoreEntries(targetDir, NextJsGitignoreEntriesToRemove)
             if (didUpdateGitignore) initCommitFiles.push(".gitignore")
 
@@ -158,6 +231,45 @@ function parseCliOptions(args: string[]): CliOptions {
             continue
         }
 
+        if (current === "--framework" || current === "-f") {
+            const value = args[index + 1]
+            if (!value) throw new Error("参数 --framework 缺少值，支持 nextjs / hono / rsbuild / electron。")
+
+            const parsed = normalizeFramework(value)
+
+            if (!parsed) throw new Error(`参数 --framework 无效: ${value}。支持 nextjs / hono / rsbuild / electron。`)
+
+            options.framework = parsed
+            index += 1
+            continue
+        }
+
+        if (current === "--ui" || current === "-u") {
+            const value = args[index + 1]
+            if (!value) throw new Error("参数 --ui 缺少值，支持 antd / shadcn。")
+
+            const parsed = normalizeUiLibrary(value)
+
+            if (!parsed) throw new Error(`参数 --ui 无效: ${value}。支持 antd / shadcn。`)
+
+            options.uiLibrary = parsed
+            index += 1
+            continue
+        }
+
+        if (current === "--tailwind" || current === "--tw") {
+            const value = args[index + 1]
+            if (!value) throw new Error("参数 --tailwind 缺少值，支持 3 / 4。")
+
+            const parsed = normalizeTailwindVersion(value)
+
+            if (!parsed) throw new Error(`参数 --tailwind 无效: ${value}。支持 3 / 4。`)
+
+            options.tailwindVersion = parsed
+            index += 1
+            continue
+        }
+
         if (current === "--name" || current === "-n") {
             const value = args[index + 1]
             if (!value) throw new Error("参数 --name 缺少值。")
@@ -168,14 +280,48 @@ function parseCliOptions(args: string[]): CliOptions {
         }
     }
 
+    if (options.projectType && (options.framework || options.uiLibrary || options.tailwindVersion))
+        throw new Error("参数 --type 不能与 --framework、--ui 或 --tailwind 同时使用。")
+
     return options
 }
 
 function normalizeProjectType(input: string): ProjectType | null {
     const value = input.trim().toLowerCase()
-    const template = TemplateDefinitions.find(item => item.displayName.toLowerCase() === value || item.aliases.some(alias => alias === value))
+    const template = TemplateDefinitions.find(
+        item => item.type === value || getTemplateDisplayName(item).toLowerCase() === value || item.aliases.some(alias => alias === value),
+    )
 
     return template?.type ?? null
+}
+
+function normalizeFramework(input: string): Framework | null {
+    const value = input.trim().toLowerCase()
+
+    if (value === "nextjs" || value === "next.js" || value === "next") return "nextjs"
+    if (value === "hono") return "hono"
+    if (value === "rsbuild") return "rsbuild"
+    if (value === "electron") return "electron"
+
+    return null
+}
+
+function normalizeUiLibrary(input: string): UiLibrary | null {
+    const value = input.trim().toLowerCase()
+
+    if (value === "antd" || value === "ant-design" || value === "ant design") return "antd"
+    if (value === "shadcn" || value === "shadcn/ui") return "shadcn"
+
+    return null
+}
+
+function normalizeTailwindVersion(input: string): TailwindVersion | null {
+    const value = input.trim().toLowerCase().replaceAll(" ", "")
+
+    if (value === "3" || value === "v3" || value === "tailwind3" || value === "tailwindcss3") return "3"
+    if (value === "4" || value === "v4" || value === "tailwind4" || value === "tailwindcss4") return "4"
+
+    return null
 }
 
 function getTemplateDefinition(projectType: ProjectType): TemplateDefinition {
@@ -185,12 +331,111 @@ function getTemplateDefinition(projectType: ProjectType): TemplateDefinition {
     return template
 }
 
-async function promptProjectType(): Promise<ProjectType> {
-    return select<ProjectType>({
-        message: "请选择项目类型:",
-        choices: TemplateDefinitions.map(template => ({
-            name: template.displayName,
-            value: template.type,
+function getTemplateDisplayName(template: TemplateDefinition): string {
+    return `${FrameworkLabels[template.framework]} + ${UiLibraryLabels[template.uiLibrary]} + ${TailwindVersionLabels[template.tailwindVersion]}`
+}
+
+async function selectTemplate(options: CliOptions): Promise<TemplateDefinition> {
+    const framework = options.framework ?? (await promptFramework())
+    const uiLibrary = options.uiLibrary ?? (await promptUiLibrary(framework))
+
+    assertUiLibraryAvailable(framework, uiLibrary)
+
+    if (framework === "electron") {
+        if (options.tailwindVersion) throw new Error("Electron 项目不支持选择 TailwindCSS 版本，请移除 --tailwind 参数。")
+
+        return getTemplateBySelection(framework, uiLibrary)
+    }
+
+    const tailwindVersion = options.tailwindVersion ?? (await promptTailwindVersion(framework, uiLibrary))
+    assertTailwindVersionAvailable(framework, uiLibrary, tailwindVersion)
+
+    return getTemplateBySelection(framework, uiLibrary, tailwindVersion)
+}
+
+function getTemplateBySelection(framework: Framework, uiLibrary: UiLibrary, tailwindVersion?: TailwindVersion): TemplateDefinition {
+    const templates = TemplateDefinitions.filter(
+        template =>
+            template.framework === framework && template.uiLibrary === uiLibrary && (framework === "electron" || template.tailwindVersion === tailwindVersion),
+    )
+
+    if (templates.length !== 1) {
+        const selection = [FrameworkLabels[framework], UiLibraryLabels[uiLibrary], tailwindVersion && TailwindVersionLabels[tailwindVersion]]
+            .filter(Boolean)
+            .join(" + ")
+
+        throw new Error(`没有唯一匹配的项目模板: ${selection}。`)
+    }
+
+    return templates[0]
+}
+
+function assertUiLibraryAvailable(framework: Framework, uiLibrary: UiLibrary) {
+    if (isUiLibraryAvailable(framework, uiLibrary)) return
+
+    const supported = getAvailableUiLibraries(framework)
+        .map(item => UiLibraryLabels[item])
+        .join(" / ")
+
+    throw new Error(`${FrameworkLabels[framework]} 不支持 ${UiLibraryLabels[uiLibrary]}，可选 ${supported}。`)
+}
+
+function isUiLibraryAvailable(framework: Framework, uiLibrary: UiLibrary): boolean {
+    return TemplateDefinitions.some(template => template.framework === framework && template.uiLibrary === uiLibrary)
+}
+
+function getAvailableUiLibraries(framework: Framework): UiLibrary[] {
+    return UiLibraryOrder.filter(uiLibrary => isUiLibraryAvailable(framework, uiLibrary))
+}
+
+function isTailwindVersionAvailable(framework: Framework, uiLibrary: UiLibrary, tailwindVersion: TailwindVersion): boolean {
+    return TemplateDefinitions.some(
+        template => template.framework === framework && template.uiLibrary === uiLibrary && template.tailwindVersion === tailwindVersion,
+    )
+}
+
+function getAvailableTailwindVersions(framework: Framework, uiLibrary: UiLibrary): TailwindVersion[] {
+    return TailwindVersionOrder.filter(tailwindVersion => isTailwindVersionAvailable(framework, uiLibrary, tailwindVersion))
+}
+
+function assertTailwindVersionAvailable(framework: Framework, uiLibrary: UiLibrary, tailwindVersion: TailwindVersion) {
+    if (isTailwindVersionAvailable(framework, uiLibrary, tailwindVersion)) return
+
+    const supported = getAvailableTailwindVersions(framework, uiLibrary)
+        .map(item => TailwindVersionLabels[item])
+        .join(" / ")
+
+    throw new Error(`${FrameworkLabels[framework]} + ${UiLibraryLabels[uiLibrary]} 不支持 ${TailwindVersionLabels[tailwindVersion]}，可选 ${supported}。`)
+}
+
+async function promptFramework(): Promise<Framework> {
+    return select<Framework>({
+        message: "请选择项目框架:",
+        choices: FrameworkOrder.map(framework => ({
+            name: FrameworkLabels[framework],
+            value: framework,
+        })),
+    })
+}
+
+async function promptUiLibrary(framework: Framework): Promise<UiLibrary> {
+    return select<UiLibrary>({
+        message: "请选择 UI 组件库:",
+        choices: UiLibraryOrder.map(uiLibrary => ({
+            name: UiLibraryLabels[uiLibrary],
+            value: uiLibrary,
+            disabled: isUiLibraryAvailable(framework, uiLibrary) ? false : "暂无可用模板",
+        })),
+    })
+}
+
+async function promptTailwindVersion(framework: Framework, uiLibrary: UiLibrary): Promise<TailwindVersion> {
+    return select<TailwindVersion>({
+        message: "请选择 TailwindCSS 版本:",
+        choices: TailwindVersionOrder.map(tailwindVersion => ({
+            name: TailwindVersionLabels[tailwindVersion],
+            value: tailwindVersion,
+            disabled: isTailwindVersionAvailable(framework, uiLibrary, tailwindVersion) ? false : "暂无可用模板",
         })),
     })
 }
