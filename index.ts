@@ -8,7 +8,7 @@ import process from "node:process"
 
 import { input, select } from "@inquirer/prompts"
 
-type Framework = "nextjs" | "hono" | "rsbuild" | "electron"
+type Framework = "nextjs" | "hono" | "rsbuild" | "electron" | "wdp"
 
 type UiLibrary = "antd" | "shadcn"
 
@@ -26,6 +26,7 @@ type ProjectType =
         | "rsbuild-shadcn-t3"
         | "electron"
         | "electron-shadcn"
+        | "wdp"
 
 interface CliOptions {
     projectType?: ProjectType
@@ -130,6 +131,14 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
         cloneUrl: "https://github.com/1adybug/geshu-electron-shadcn-template.git",
         aliases: ["electron-shadcn", "shadcn-electron", "10"],
     },
+    {
+        type: "wdp",
+        framework: "wdp",
+        uiLibrary: "shadcn",
+        tailwindVersion: "4",
+        cloneUrl: "https://github.com/1adybug/geshu-wdp-template",
+        aliases: ["wdp", "11"],
+    },
 ]
 
 const FrameworkLabels: Record<Framework, string> = {
@@ -137,6 +146,7 @@ const FrameworkLabels: Record<Framework, string> = {
     hono: "Hono",
     rsbuild: "Rsbuild",
     electron: "Electron",
+    wdp: "wdp",
 }
 
 const UiLibraryLabels: Record<UiLibrary, string> = {
@@ -149,7 +159,7 @@ const TailwindVersionLabels: Record<TailwindVersion, string> = {
     "4": "TailwindCSS 4",
 }
 
-const FrameworkOrder: readonly Framework[] = ["nextjs", "hono", "rsbuild", "electron"]
+const FrameworkOrder: readonly Framework[] = ["nextjs", "hono", "rsbuild", "electron", "wdp"]
 
 const UiLibraryOrder: readonly UiLibrary[] = ["antd", "shadcn"]
 
@@ -233,11 +243,11 @@ function parseCliOptions(args: string[]): CliOptions {
 
         if (current === "--framework" || current === "-f") {
             const value = args[index + 1]
-            if (!value) throw new Error("参数 --framework 缺少值，支持 nextjs / hono / rsbuild / electron。")
+            if (!value) throw new Error("参数 --framework 缺少值，支持 nextjs / hono / rsbuild / electron / wdp。")
 
             const parsed = normalizeFramework(value)
 
-            if (!parsed) throw new Error(`参数 --framework 无效: ${value}。支持 nextjs / hono / rsbuild / electron。`)
+            if (!parsed) throw new Error(`参数 --framework 无效: ${value}。支持 nextjs / hono / rsbuild / electron / wdp。`)
 
             options.framework = parsed
             index += 1
@@ -302,6 +312,7 @@ function normalizeFramework(input: string): Framework | null {
     if (value === "hono") return "hono"
     if (value === "rsbuild") return "rsbuild"
     if (value === "electron") return "electron"
+    if (value === "wdp") return "wdp"
 
     return null
 }
