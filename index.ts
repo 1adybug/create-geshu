@@ -10,6 +10,7 @@ import { confirm, input, select } from "@inquirer/prompts"
 
 import { type CommandRunner, runCommand } from "./commands.ts"
 import { configureNextJsLicense, initializeNextJsPrismaMigration, NextJsPrismaMigrationDirectory } from "./nextjs.ts"
+import { detectPackageManager, getNextJsSetupCommands } from "./package-manager.ts"
 
 type Framework = "nextjs" | "hono" | "rsbuild" | "electron" | "wdp"
 
@@ -188,6 +189,7 @@ export async function main(args = process.argv.slice(2), run: CommandRunner = ru
         if (options.localLicense && !isInteractive()) throw new Error("开启本地授权需要交互终端，请在终端中运行授权向导，或使用 --no-local-license。")
         const template = options.projectType ? getTemplateDefinition(options.projectType) : await selectTemplate(options)
         if (options.localLicense && template.framework !== "nextjs") throw new Error("--local-license 仅适用于 Next.js 模板。")
+        const packageManager = template.framework === "nextjs" ? await detectPackageManager() : undefined
         const projectName = options.projectName ?? (await promptProjectName())
         const nameErrors = validateProjectName(projectName)
 
@@ -219,12 +221,12 @@ export async function main(args = process.argv.slice(2), run: CommandRunner = ru
             if (didRemoveMigrationDocument) initCommitFiles.push(ShadcnMigrationDocument)
         }
 
-        if (template.framework === "nextjs") {
+        if (packageManager) {
             stage = "生成项目初始迁移"
             const didUpdateGitignore = await removeGitignoreEntries(targetDir, NextJsGitignoreEntriesToRemove)
             if (didUpdateGitignore) initCommitFiles.push(".gitignore")
 
-            await initializeNextJsPrismaMigration(targetDir, run)
+            await initializeNextJsPrismaMigration(targetDir, packageManager, run)
             initCommitFiles.push(NextJsPrismaMigrationDirectory)
 
             stage = localLicense ? "初始化本地授权" : "关闭本地授权"
@@ -237,9 +239,9 @@ export async function main(args = process.argv.slice(2), run: CommandRunner = ru
 
         console.log(`\n创建完成: ${projectName}`)
 
-        if (template.framework === "nextjs") {
+        if (packageManager) {
             console.log(`本地授权: ${localLicense ? "已初始化" : "关闭"}；初始迁移已生成，尚未安装项目依赖或创建数据库。`)
-            console.log(`下一步: cd ${projectName}，安装依赖后运行 npm run db:dev，再运行 npm run dev。`)
+            console.log(`下一步: cd ${projectName}，依次运行 ${getNextJsSetupCommands(packageManager)}。`)
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : "未知错误，请重试。"

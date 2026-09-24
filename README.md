@@ -17,6 +17,18 @@ npx create-geshu@latest --framework nextjs --ui shadcn --tailwind 4 --name my-ap
 
 三种 Next.js 模板均从自己的 `package.json` 读取 Prisma 版本范围，下载相应版本的 CLI，基于当前 schema 生成项目独立的初始迁移。首次下载需要网络，等待期间会显示阶段、版本范围和已用时间。
 
+包管理器检测和命令映射使用 [package-manager-detector](https://github.com/antfu-collective/package-manager-detector)，优先读取启动脚手架时的包管理器信息。直接使用 Node 启动、没有启动信息时，再检查启动目录的 `packageManager`、`devEngines.packageManager` 和锁文件；都未检测到时默认使用 npm。不会根据克隆下来的模板切换包管理器。
+
+| 启动时的包管理器 | Prisma 执行方式                                        |
+| ---------------- | ------------------------------------------------------ |
+| npm / npx        | `npx --yes --package prisma@<模板版本范围> prisma ...` |
+| pnpm             | `pnpm dlx prisma@<模板版本范围> ...`                   |
+| Yarn 2+          | `yarn dlx prisma@<模板版本范围> ...`                   |
+| Bun              | `bun x prisma@<模板版本范围> ...`                      |
+| Yarn 1           | 明确提示后使用检测库的 `npx` 兼容方式                  |
+
+Yarn 2+ 执行 Prisma 时，临时使用 `node-modules` 安装模式，避免 Windows 下的 PnP 加载兼容问题；不会修改项目的 Yarn 配置。
+
 创建过程不会安装整个项目的依赖，也不会创建或修改业务数据库。初始 SQL 和 `migration_lock.toml` 会纳入项目的 `feat: init` 提交。
 
 创建后进入项目，使用自己的包管理器安装依赖，再执行：
@@ -25,6 +37,8 @@ npx create-geshu@latest --framework nextjs --ui shadcn --tailwind 4 --name my-ap
 npm run db:dev
 npm run dev
 ```
+
+上面以 npm 为例，CLI 输出的安装、初始化和启动命令会跟随检测到的包管理器。
 
 命令失败或取消时保留项目目录，并指出失败阶段。请检查保留的文件后手工完成初始化，或换一个不存在的项目目录重新创建；脚手架不会覆盖已有项目。
 
@@ -48,6 +62,9 @@ pnpm lint
 pnpm test
 pnpm build
 pnpm test:templates
+pnpm test:package-managers
 ```
 
 模板集成验证会在系统临时目录克隆三个当前 Next 模板，运行打包后的 CLI，并用内存 SQLite 验证迁移。授权场景只使用临时测试签发材料，不访问真实私钥，不生成镜像或发布。
+
+包管理器集成验证需要 PATH 中可执行的 npm、pnpm、Bun 和 Yarn 2+，会分别下载并执行模板版本的 Prisma，验证含空格路径、SQL 可执行性，以及项目中没有产生依赖、数据库或锁文件；还会通过 Yarn PnP 启动本地打包产物，验证完整创建流程。

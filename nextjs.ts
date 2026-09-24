@@ -4,9 +4,11 @@ import path from "node:path"
 import process from "node:process"
 import { pathToFileURL } from "node:url"
 
+import type { DetectResult } from "package-manager-detector"
 import { minVersion, validRange } from "semver"
 
 import { type CommandRunner, runCommand } from "./commands.ts"
+import { getPrismaCommand } from "./package-manager.ts"
 
 export const NextJsPrismaMigrationDirectory = "prisma/migrations"
 
@@ -22,7 +24,7 @@ export function getPrismaVersion(packageJson: PrismaPackageJson): string {
     return version.trim()
 }
 
-export async function initializeNextJsPrismaMigration(projectDir: string, run: CommandRunner = runCommand) {
+export async function initializeNextJsPrismaMigration(projectDir: string, packageManager: DetectResult, run: CommandRunner = runCommand) {
     const packageJson = JSON.parse(await fs.readFile(path.join(projectDir, "package.json"), "utf8"))
     const version = getPrismaVersion(packageJson)
     const schema = await fs.readFile(path.join(projectDir, "prisma/schema.prisma"), "utf8")
@@ -36,29 +38,27 @@ export async function initializeNextJsPrismaMigration(projectDir: string, run: C
     const sqlPath = path.join(migrationDirectory, "0_init/migration.sql")
 
     try {
-        await run(
-            "npx",
-            [
-                "--yes",
-                `--package=prisma@${version}`,
-                "prisma",
-                "migrate",
-                "diff",
-                "--config",
-                "prisma.config.ts",
-                "--from-empty",
-                "--to-schema",
-                "prisma/schema.prisma",
-                "--script",
-                "--output",
-                sqlPath,
-            ],
-            projectDir,
-            {
-                env: { NODE_ENV: "development" },
-                progress: `正在准备 Prisma ${version} 并生成初始迁移；首次运行需要下载 Prisma 及引擎`,
+        if (packageManager.agent === "yarn") console.log("Yarn 1 不提供 dlx；按照 package-manager-detector 的兼容方式，使用 npx 临时执行 Prisma。")
+        const { command, args } = getPrismaCommand(packageManager, version, [
+            "migrate",
+            "diff",
+            "--config",
+            "prisma.config.ts",
+            "--from-empty",
+            "--to-schema",
+            "prisma/schema.prisma",
+            "--script",
+            "--output",
+            sqlPath,
+        ])
+        await run(command, args, projectDir, {
+            env: {
+                NODE_ENV: "development",
+                // Prisma 在 Windows 上不能可靠地从 Yarn PnP 压缩包加载；只调整 dlx 临时环境。
+                ...(packageManager.agent === "yarn@berry" ? { YARN_NODE_LINKER: "node-modules" } : {}),
             },
-        )
+            progress: `正在通过 ${command} 准备 Prisma ${version} 并生成初始迁移；首次运行需要下载 Prisma 及引擎`,
+        })
         const sql = await fs.readFile(sqlPath, "utf8").catch(error => {
             if (error.code === "ENOENT") throw new Error("Prisma 未生成初始迁移 SQL。")
             throw error

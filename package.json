@@ -18,7 +18,8 @@
         "lint": "eslint .",
         "typecheck": "tsc --noEmit",
         "test": "node --test scripts/*.test.mjs",
-        "test:templates": "node --test scripts/templates.integration.mjs"
+        "test:templates": "node --test scripts/templates.integration.mjs",
+        "test:package-managers": "node --test scripts/package-managers.integration.mjs"
     },
     "keywords": [],
     "author": "",
@@ -43,6 +44,7 @@
     "dependencies": {
         "@inquirer/prompts": "^8.3.0",
         "cross-spawn": "^7.0.6",
+        "package-manager-detector": "^1.8.0",
         "semver": "^7.8.5"
     }
 }

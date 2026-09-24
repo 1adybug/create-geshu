@@ -8,6 +8,8 @@ import { runCommand } from "../commands.ts"
 import { main, parseCliOptions } from "../index.ts"
 import { configureNextJsLicense, getPrismaVersion, initializeNextJsPrismaMigration } from "../nextjs.ts"
 
+const npm = { name: "npm", agent: "npm" }
+
 async function workspace(t) {
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "create-geshu-test "))
 
@@ -52,9 +54,9 @@ test("license flags preserve the unset default and reject contradictory choices"
 test("migration generation uses the declared version and produces a complete migration without a database", async t => {
     const directory = await workspace(t)
     await template(directory)
-    await initializeNextJsPrismaMigration(directory, async (command, args, cwd, options) => {
+    await initializeNextJsPrismaMigration(directory, npm, async (command, args, cwd, options) => {
         assert.equal(command, "npx")
-        assert(args.includes("--package=prisma@^7.10.0"))
+        assert(args.includes("prisma@^7.10.0"))
         assert.deepEqual(args.slice(args.indexOf("migrate"), args.indexOf("--output")), [
             "migrate",
             "diff",
@@ -79,7 +81,7 @@ for (const scenario of ["network failure", "missing SQL", "empty SQL", "comment-
         const directory = await workspace(t)
         await template(directory)
         await assert.rejects(
-            initializeNextJsPrismaMigration(directory, async (_command, args) => {
+            initializeNextJsPrismaMigration(directory, npm, async (_command, args) => {
                 if (scenario === "network failure") throw new Error("registry unavailable")
                 if (scenario !== "missing SQL")
                     await fs.writeFile(args[args.indexOf("--output") + 1], scenario === "empty SQL" ? "\n" : "-- empty migration\n/* no statements */")
@@ -90,13 +92,57 @@ for (const scenario of ["network failure", "missing SQL", "empty SQL", "comment-
     })
 }
 
+test("a native manager failure stops initialization without falling back to npx", async t => {
+    const directory = await workspace(t)
+    await template(directory)
+
+    const calls = []
+
+    await assert.rejects(
+        initializeNextJsPrismaMigration(directory, { name: "pnpm", agent: "pnpm" }, async command => {
+            calls.push(command)
+            throw new Error("pnpm registry unavailable")
+        }),
+        /pnpm registry unavailable/,
+    )
+    assert.deepEqual(calls, ["pnpm"])
+    assert.equal(await fs.stat(path.join(directory, "prisma/migrations")).catch(() => null), null)
+})
+
+test("Yarn Classic announces its npx compatibility command before execution", async t => {
+    const directory = await workspace(t)
+    await template(directory)
+
+    const messages = []
+
+    t.mock.method(console, "log", message => messages.push(message))
+    await initializeNextJsPrismaMigration(directory, { name: "yarn", agent: "yarn" }, async (command, args) => {
+        assert.equal(command, "npx")
+        assert(messages.some(message => message.includes("Yarn 1") && message.includes("npx")))
+        await fs.writeFile(args[args.indexOf("--output") + 1], "CREATE TABLE example (id TEXT);")
+    })
+})
+
+test("Yarn Berry adjusts only the temporary Prisma environment for PnP compatibility", async t => {
+    const directory = await workspace(t)
+    await template(directory)
+    const config = "nodeLinker: pnp\n"
+    await fs.writeFile(path.join(directory, ".yarnrc.yml"), config)
+    await initializeNextJsPrismaMigration(directory, { name: "yarn", agent: "yarn@berry" }, async (command, args, _cwd, options) => {
+        assert.equal(command, "yarn")
+        assert.equal(options.env.YARN_NODE_LINKER, "node-modules")
+        await fs.writeFile(args[args.indexOf("--output") + 1], "CREATE TABLE example (id TEXT);")
+    })
+    assert.equal(await fs.readFile(path.join(directory, ".yarnrc.yml"), "utf8"), config)
+})
+
 test("existing migrations are preserved", async t => {
     const directory = await workspace(t)
     await template(directory)
     await fs.mkdir(path.join(directory, "prisma/migrations"))
     await fs.writeFile(path.join(directory, "prisma/migrations/existing.sql"), "keep")
     await assert.rejects(
-        initializeNextJsPrismaMigration(directory, async () => assert.fail("must not run Prisma")),
+        initializeNextJsPrismaMigration(directory, npm, async () => assert.fail("must not run Prisma")),
         /已包含迁移/,
     )
     assert.equal(await fs.readFile(path.join(directory, "prisma/migrations/existing.sql"), "utf8"), "keep")
@@ -146,7 +192,7 @@ for (const scenario of ["success", "network failure", "empty SQL"]) {
                 calls.push({ command, args, cwd })
                 if (command === "git" && args[0] === "clone") await template(path.join(directory, "example"))
 
-                if (command === "npx") {
+                if (args.includes("migrate")) {
                     if (scenario === "network failure") throw new Error("registry unavailable")
                     await fs.writeFile(args[args.indexOf("--output") + 1], scenario === "empty SQL" ? "" : "CREATE TABLE example (id TEXT);")
                 }

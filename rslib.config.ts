@@ -4,6 +4,8 @@ export default defineConfig({
     lib: [
         {
             format: "esm",
+            // CLI 随包携带运行依赖，避免 Yarn PnP 在加载外部 CJS 模块时失败。
+            autoExternal: { dependencies: false },
             source: {
                 entry: {
                     index: "./index.ts",
