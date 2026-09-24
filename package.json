@@ -15,7 +15,10 @@
         "format": "prettier --write .",
         "fg": "npm run format && git add . && git commit -m \"✨feature: format\"",
         "prepare": "husky",
-        "lint": "eslint ."
+        "lint": "eslint .",
+        "typecheck": "tsc --noEmit",
+        "test": "node --test scripts/*.test.mjs",
+        "test:templates": "node --test scripts/templates.integration.mjs"
     },
     "keywords": [],
     "author": "",
@@ -25,7 +28,9 @@
         "@1adybug/eslint": "^0.0.12",
         "@1adybug/prettier": "^0.0.31",
         "@rslib/core": "^0.23.2",
+        "@types/cross-spawn": "^6.0.6",
         "@types/node": "^26.1.1",
+        "@types/semver": "^7.8.0",
         "eslint": "^9.39.5",
         "husky": "^9.1.7",
         "lint-staged": "^17.0.8",
@@ -36,6 +41,8 @@
         "**/*": "prettier --write --ignore-unknown"
     },
     "dependencies": {
-        "@inquirer/prompts": "^8.3.0"
+        "@inquirer/prompts": "^8.3.0",
+        "cross-spawn": "^7.0.6",
+        "semver": "^7.8.5"
     }
 }

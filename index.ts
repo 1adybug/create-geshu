@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process"
 import { promises as fs } from "node:fs"
 import { isBuiltin } from "node:module"
 import path from "node:path"
 import process from "node:process"
+import { pathToFileURL } from "node:url"
 
-import { input, select } from "@inquirer/prompts"
+import { confirm, input, select } from "@inquirer/prompts"
+
+import { type CommandRunner, runCommand } from "./commands.ts"
+import { configureNextJsLicense, initializeNextJsPrismaMigration, NextJsPrismaMigrationDirectory } from "./nextjs.ts"
 
 type Framework = "nextjs" | "hono" | "rsbuild" | "electron" | "wdp"
 
@@ -34,6 +37,7 @@ interface CliOptions {
     framework?: Framework
     uiLibrary?: UiLibrary
     tailwindVersion?: TailwindVersion
+    localLicense?: boolean
 }
 
 interface TemplateDefinition {
@@ -171,29 +175,41 @@ const TemplatePushBlockedUrl = "no_push://template"
 
 const WindowsReservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 
-const NextJsGitignoreEntriesToRemove = ["prisma/migrations"]
-
-const NextJsPrismaMigrationDirectory = "prisma/migrations"
+const NextJsGitignoreEntriesToRemove = ["prisma/migrations", "/prisma/migrations", "prisma/migrations/", "/prisma/migrations/"]
 
 const ShadcnMigrationDocument = "SHADCN_TAILWIND_V4_MIGRATION.md"
 
-async function main() {
+export async function main(args = process.argv.slice(2), run: CommandRunner = runCommand) {
+    let stage = "检查创建参数"
+    let targetDir: string | undefined
+
     try {
-        const options = parseCliOptions(process.argv.slice(2))
+        const options = parseCliOptions(args)
+        if (options.localLicense && !isInteractive()) throw new Error("开启本地授权需要交互终端，请在终端中运行授权向导，或使用 --no-local-license。")
         const template = options.projectType ? getTemplateDefinition(options.projectType) : await selectTemplate(options)
+        if (options.localLicense && template.framework !== "nextjs") throw new Error("--local-license 仅适用于 Next.js 模板。")
         const projectName = options.projectName ?? (await promptProjectName())
         const nameErrors = validateProjectName(projectName)
 
         if (nameErrors.length > 0) throw new Error(`项目名称不合法:\n${nameErrors.map(item => `- ${item}`).join("\n")}`)
+        if (template.framework === "nextjs" && !/^[a-z0-9][a-z0-9._-]*$/.test(projectName))
+            throw new Error("Next.js 项目名称也是产品 ID，必须以小写字母或数字开头，且只能包含小写字母、数字、点、下划线和短横线。")
 
-        const targetDir = path.resolve(process.cwd(), projectName)
+        const localLicense =
+            template.framework === "nextjs"
+                ? (options.localLicense ?? (isInteractive() ? await confirm({ message: "是否开启本地授权？", default: false }) : false))
+                : false
+        const directory = path.resolve(process.cwd(), projectName)
 
-        await assertTargetDirectoryAvailable(targetDir, projectName)
+        await assertTargetDirectoryAvailable(directory, projectName)
+        targetDir = directory
 
         console.log(`\n开始创建项目: ${projectName} (${getTemplateDisplayName(template)})`)
-        await runCommand("git", ["clone", template.cloneUrl, projectName], process.cwd())
-        await runCommand("git", ["remote", "rename", "origin", "template"], targetDir)
-        await runCommand("git", ["remote", "set-url", "--push", "template", TemplatePushBlockedUrl], targetDir)
+        stage = "克隆项目模板"
+        await run("git", ["clone", template.cloneUrl, projectName], process.cwd())
+        stage = "配置项目名称和模板远程仓库"
+        await run("git", ["remote", "rename", "origin", "template"], targetDir)
+        await run("git", ["remote", "set-url", "--push", "template", TemplatePushBlockedUrl], targetDir)
         await updatePackageName(targetDir, projectName)
 
         const initCommitFiles = ["package.json"]
@@ -204,29 +220,51 @@ async function main() {
         }
 
         if (template.framework === "nextjs") {
+            stage = "生成项目初始迁移"
             const didUpdateGitignore = await removeGitignoreEntries(targetDir, NextJsGitignoreEntriesToRemove)
             if (didUpdateGitignore) initCommitFiles.push(".gitignore")
 
-            const didCreateMigrationDirectory = await initializeNextJsPrismaMigration(targetDir)
-            if (didCreateMigrationDirectory) initCommitFiles.push(NextJsPrismaMigrationDirectory)
+            await initializeNextJsPrismaMigration(targetDir, run)
+            initCommitFiles.push(NextJsPrismaMigrationDirectory)
+
+            stage = localLicense ? "初始化本地授权" : "关闭本地授权"
+            if (await configureNextJsLicense(targetDir, localLicense, run)) initCommitFiles.push("license")
         }
 
-        await runCommand("git", ["add", ...initCommitFiles], targetDir)
-        await runCommand("git", ["commit", "--no-verify", "-m", "feat: init"], targetDir)
+        stage = "提交项目初始化文件"
+        await run("git", ["add", "-A", "--", ...initCommitFiles], targetDir)
+        await run("git", ["commit", "--no-verify", "-m", "feat: init"], targetDir)
 
         console.log(`\n创建完成: ${projectName}`)
+
+        if (template.framework === "nextjs") {
+            console.log(`本地授权: ${localLicense ? "已初始化" : "关闭"}；初始迁移已生成，尚未安装项目依赖或创建数据库。`)
+            console.log(`下一步: cd ${projectName}，安装依赖后运行 npm run db:dev，再运行 npm run dev。`)
+        }
     } catch (error) {
         const message = error instanceof Error ? error.message : "未知错误，请重试。"
-        console.error(`\n创建失败: ${message}`)
+        console.error(`\n创建失败（${stage}）: ${message}`)
+        if (targetDir && (await fs.stat(targetDir).catch(() => null))) console.error(`项目目录保留在 ${targetDir}；未完成的初始化不会自动提交。`)
         process.exitCode = 1
     }
 }
 
-function parseCliOptions(args: string[]): CliOptions {
+function isInteractive() {
+    return Boolean(process.stdin.isTTY && process.stdout.isTTY)
+}
+
+export function parseCliOptions(args: string[]): CliOptions {
     const options: CliOptions = {}
 
     for (let index = 0; index < args.length; index += 1) {
         const current = args[index]
+
+        if (current === "--local-license" || current === "--no-local-license") {
+            const enabled = current === "--local-license"
+            if (options.localLicense !== undefined && options.localLicense !== enabled) throw new Error("--local-license 与 --no-local-license 不能同时使用。")
+            options.localLicense = enabled
+            continue
+        }
 
         if (current === "--type" || current === "-t") {
             const value = args[index + 1]
@@ -590,53 +628,4 @@ async function removeGitignoreEntries(projectDir: string, entries: string[]): Pr
     return true
 }
 
-async function initializeNextJsPrismaMigration(projectDir: string): Promise<boolean> {
-    await runCommand("npx", ["--yes", "prisma", "migrate", "dev", "--name", "init", "--create-only"], projectDir, {
-        env: { NODE_ENV: "development" },
-    })
-
-    return pathExists(path.join(projectDir, NextJsPrismaMigrationDirectory))
-}
-
-async function pathExists(targetPath: string): Promise<boolean> {
-    try {
-        await fs.access(targetPath)
-        return true
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false
-
-        throw error
-    }
-}
-
-interface RunCommandOptions {
-    env?: NodeJS.ProcessEnv
-}
-
-async function runCommand(command: string, args: string[], cwd: string, options: RunCommandOptions = {}) {
-    const display = `${command} ${args.join(" ")}`
-    console.log(`\n> ${display}`)
-
-    await new Promise<void>((resolve, reject) => {
-        const child = spawn(command, args, {
-            cwd,
-            env: options.env ? { ...process.env, ...options.env } : process.env,
-            stdio: "inherit",
-        })
-
-        child.once("error", error => {
-            reject(error)
-        })
-
-        child.once("close", code => {
-            if (code === 0) {
-                resolve()
-                return
-            }
-
-            reject(new Error(`命令执行失败（退出码 ${code}）: ${display}`))
-        })
-    })
-}
-
-void main()
+if (process.argv[1] && import.meta.url === pathToFileURL(await fs.realpath(process.argv[1])).href) void main()
