@@ -11,11 +11,28 @@ npx create-geshu@latest
 ```sh
 npx create-geshu@latest --type nextjs-shadcn --name my-app --no-local-license
 npx create-geshu@latest --framework nextjs --ui shadcn --tailwind 4 --name my-app
+npx create-geshu@latest --type vercel-supabase --name my-cloud-app
 ```
 
-## Next.js 初始化
+## Vercel + Supabase 模板
 
-三种 Next.js 模板均从自己的 `package.json` 读取 Prisma 版本范围，下载相应版本的 CLI，基于当前 schema 生成项目独立的初始迁移。首次下载需要网络，等待期间会显示阶段、版本范围和已用时间。
+`--type vercel-supabase` 创建 `geshu-vercel-supabase-template` 的下游项目，使用 Next.js、shadcn、TailwindCSS 4 和 Supabase。别名包括 `supabase`、`nextjs-vercel-supabase`、`next-vercel-supabase` 和 `12`。
+
+也可以使用分项参数：
+
+```sh
+npx create-geshu@latest --framework nextjs --ui shadcn --tailwind 4 --deployment vercel-supabase --name my-cloud-app
+```
+
+交互选择 Next.js + shadcn + TailwindCSS 4 后会询问部署方式；默认保留原模板。非交互调用省略 `--deployment` 时仍选原模板。`--deployment default` 可显式选择原模板，其他框架/UI/Tailwind 组合不支持 `vercel-supabase`。`--type` 不能与分项选择参数混用。
+
+云模板保留受版本管理的 `pnpm-lock.yaml`、`supabase/config.toml` 和 SQL 迁移历史，不生成 Prisma 迁移、不安装依赖、不连接数据库，也不初始化离线授权。`--local-license` 不适用；`--no-local-license` 可兼容传入。
+
+创建后按照项目 README 配置 Supabase 和 Vercel，再通过 Git 平台集成部署。脚手架不会替你创建云项目或应用数据库迁移。本地开发使用模板固定的 pnpm：先配置 README 中的环境变量，再运行 `pnpm install --frozen-lockfile` 和 `pnpm dev`。
+
+## Prisma Next.js 模板初始化
+
+`nextjs`、`nextjs-shadcn`、`nextjs-shadcn-t3` 从自己的 `package.json` 读取 Prisma 版本范围，下载相应版本的 CLI，基于当前 schema 生成项目独立的初始迁移。首次下载需要网络，等待期间会显示阶段、版本范围和已用时间。
 
 包管理器检测和命令映射使用 [package-manager-detector](https://github.com/antfu-collective/package-manager-detector)，优先读取启动脚手架时的包管理器信息。直接使用 Node 启动、没有启动信息时，再检查启动目录的 `packageManager`、`devEngines.packageManager` 和锁文件；都未检测到时默认使用 npm。不会根据克隆下来的模板切换包管理器。
 
@@ -44,7 +61,7 @@ npm run dev
 
 ## 本地授权
 
-Next.js 项目会询问“是否开启本地授权？”，默认关闭。这里指部署时的本地离线许可证，不是账号登录；本地开发仍沿用模板的 `mock` 模式。
+使用 Prisma 的三个 Next.js 模板会询问“是否开启本地授权？”，默认关闭。这里指部署时的本地离线许可证，不是账号登录；本地开发仍沿用模板的 `mock` 模式。Vercel + Supabase 模板没有此询问和能力。
 
 - `--no-local-license`：跳过询问，移除新项目中的 `license/`，业务打包使用无授权模式。授权相关应用代码和维护脚本仍保留。
 - `--local-license`：跳过开关询问，立即进入模板授权向导。需要交互终端，使用已有统一签发材料，或导入已签好的当前项目策略。
@@ -66,5 +83,7 @@ pnpm test:package-managers
 ```
 
 模板集成验证会在系统临时目录克隆三个当前 Next 模板，运行打包后的 CLI，并用内存 SQLite 验证迁移。授权场景只使用临时测试签发材料，不访问真实私钥，不生成镜像或发布。
+
+`pnpm test` 包含云模板的本地 Git fixture 集成验证，无需访问新模板的 GitHub 仓库或真实 Supabase 项目，覆盖锁文件/迁移原样保留、正确的模板远程仓库和初始化提交，以及旧模板选择兼容性。
 
 包管理器集成验证需要 PATH 中可执行的 npm、pnpm、Bun 和 Yarn 2+，会分别下载并执行模板版本的 Prisma，验证含空格路径、SQL 可执行性，以及项目中没有产生依赖、数据库或锁文件；还会通过 Yarn PnP 启动本地打包产物，验证完整创建流程。

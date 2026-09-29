@@ -18,6 +18,8 @@ type UiLibrary = "antd" | "shadcn"
 
 type TailwindVersion = "3" | "4"
 
+type Deployment = "default" | "vercel-supabase"
+
 type ProjectType =
 
         | "nextjs"
@@ -31,6 +33,7 @@ type ProjectType =
         | "electron"
         | "electron-shadcn"
         | "wdp"
+        | "vercel-supabase"
 
 interface CliOptions {
     projectType?: ProjectType
@@ -38,6 +41,7 @@ interface CliOptions {
     framework?: Framework
     uiLibrary?: UiLibrary
     tailwindVersion?: TailwindVersion
+    deployment?: Deployment
     localLicense?: boolean
 }
 
@@ -46,6 +50,9 @@ interface TemplateDefinition {
     framework: Framework
     uiLibrary: UiLibrary
     tailwindVersion: TailwindVersion
+    deployment: Deployment
+    databaseSetup: "none" | "prisma-sqlite" | "supabase"
+    supportsLocalLicense: boolean
     cloneUrl: string
     aliases: readonly string[]
 }
@@ -58,6 +65,9 @@ interface PackageJsonContent {
 const TemplateDefinitions: readonly TemplateDefinition[] = [
     {
         type: "rsbuild",
+        deployment: "default",
+        databaseSetup: "none",
+        supportsLocalLicense: false,
         framework: "rsbuild",
         uiLibrary: "antd",
         tailwindVersion: "3",
@@ -66,6 +76,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "nextjs",
+        deployment: "default",
+        databaseSetup: "prisma-sqlite",
+        supportsLocalLicense: true,
         framework: "nextjs",
         uiLibrary: "antd",
         tailwindVersion: "3",
@@ -74,6 +87,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "electron",
+        deployment: "default",
+        databaseSetup: "none",
+        supportsLocalLicense: false,
         framework: "electron",
         uiLibrary: "antd",
         tailwindVersion: "3",
@@ -82,6 +98,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "rsbuild-shadcn",
+        deployment: "default",
+        databaseSetup: "none",
+        supportsLocalLicense: false,
         framework: "rsbuild",
         uiLibrary: "shadcn",
         tailwindVersion: "4",
@@ -90,6 +109,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "nextjs-shadcn",
+        deployment: "default",
+        databaseSetup: "prisma-sqlite",
+        supportsLocalLicense: true,
         framework: "nextjs",
         uiLibrary: "shadcn",
         tailwindVersion: "4",
@@ -98,6 +120,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "nextjs-shadcn-t3",
+        deployment: "default",
+        databaseSetup: "prisma-sqlite",
+        supportsLocalLicense: true,
         framework: "nextjs",
         uiLibrary: "shadcn",
         tailwindVersion: "3",
@@ -106,6 +131,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "rsbuild-shadcn-t3",
+        deployment: "default",
+        databaseSetup: "none",
+        supportsLocalLicense: false,
         framework: "rsbuild",
         uiLibrary: "shadcn",
         tailwindVersion: "3",
@@ -114,6 +142,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "hono-shadcn",
+        deployment: "default",
+        databaseSetup: "none",
+        supportsLocalLicense: false,
         framework: "hono",
         uiLibrary: "shadcn",
         tailwindVersion: "4",
@@ -122,6 +153,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "hono-shadcn-t3",
+        deployment: "default",
+        databaseSetup: "none",
+        supportsLocalLicense: false,
         framework: "hono",
         uiLibrary: "shadcn",
         tailwindVersion: "3",
@@ -130,6 +164,9 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "electron-shadcn",
+        deployment: "default",
+        databaseSetup: "none",
+        supportsLocalLicense: false,
         framework: "electron",
         uiLibrary: "shadcn",
         tailwindVersion: "4",
@@ -138,11 +175,25 @@ const TemplateDefinitions: readonly TemplateDefinition[] = [
     },
     {
         type: "wdp",
+        deployment: "default",
+        databaseSetup: "none",
+        supportsLocalLicense: false,
         framework: "wdp",
         uiLibrary: "shadcn",
         tailwindVersion: "4",
         cloneUrl: "https://github.com/1adybug/geshu-wdp-template",
         aliases: ["wdp", "11"],
+    },
+    {
+        type: "vercel-supabase",
+        deployment: "vercel-supabase",
+        databaseSetup: "supabase",
+        supportsLocalLicense: false,
+        framework: "nextjs",
+        uiLibrary: "shadcn",
+        tailwindVersion: "4",
+        cloneUrl: "https://github.com/1adybug/geshu-vercel-supabase-template.git",
+        aliases: ["vercel-supabase", "nextjs-vercel-supabase", "next-vercel-supabase", "supabase", "12"],
     },
 ]
 
@@ -162,6 +213,11 @@ const UiLibraryLabels: Record<UiLibrary, string> = {
 const TailwindVersionLabels: Record<TailwindVersion, string> = {
     "3": "TailwindCSS 3",
     "4": "TailwindCSS 4",
+}
+
+const DeploymentLabels: Record<Deployment, string> = {
+    default: "默认部署",
+    "vercel-supabase": "Vercel + Supabase",
 }
 
 const FrameworkOrder: readonly Framework[] = ["nextjs", "hono", "rsbuild", "electron", "wdp"]
@@ -186,21 +242,20 @@ export async function main(args = process.argv.slice(2), run: CommandRunner = ru
 
     try {
         const options = parseCliOptions(args)
-        if (options.localLicense && !isInteractive()) throw new Error("开启本地授权需要交互终端，请在终端中运行授权向导，或使用 --no-local-license。")
         const template = options.projectType ? getTemplateDefinition(options.projectType) : await selectTemplate(options)
-        if (options.localLicense && template.framework !== "nextjs") throw new Error("--local-license 仅适用于 Next.js 模板。")
-        const packageManager = template.framework === "nextjs" ? await detectPackageManager() : undefined
+        if (options.localLicense && !template.supportsLocalLicense) throw new Error("所选模板不支持 --local-license，请移除该参数或使用 --no-local-license。")
+        if (options.localLicense && !isInteractive()) throw new Error("开启本地授权需要交互终端，请在终端中运行授权向导，或使用 --no-local-license。")
+        const packageManager = template.databaseSetup === "prisma-sqlite" ? await detectPackageManager() : undefined
         const projectName = options.projectName ?? (await promptProjectName())
         const nameErrors = validateProjectName(projectName)
 
         if (nameErrors.length > 0) throw new Error(`项目名称不合法:\n${nameErrors.map(item => `- ${item}`).join("\n")}`)
-        if (template.framework === "nextjs" && !/^[a-z0-9][a-z0-9._-]*$/.test(projectName))
+        if (template.supportsLocalLicense && !/^[a-z0-9][a-z0-9._-]*$/.test(projectName))
             throw new Error("Next.js 项目名称也是产品 ID，必须以小写字母或数字开头，且只能包含小写字母、数字、点、下划线和短横线。")
 
-        const localLicense =
-            template.framework === "nextjs"
-                ? (options.localLicense ?? (isInteractive() ? await confirm({ message: "是否开启本地授权？", default: false }) : false))
-                : false
+        const localLicense = template.supportsLocalLicense
+            ? (options.localLicense ?? (isInteractive() ? await confirm({ message: "是否开启本地授权？", default: false }) : false))
+            : false
         const directory = path.resolve(process.cwd(), projectName)
 
         await assertTargetDirectoryAvailable(directory, projectName)
@@ -228,7 +283,9 @@ export async function main(args = process.argv.slice(2), run: CommandRunner = ru
 
             await initializeNextJsPrismaMigration(targetDir, packageManager, run)
             initCommitFiles.push(NextJsPrismaMigrationDirectory)
+        }
 
+        if (template.supportsLocalLicense) {
             stage = localLicense ? "初始化本地授权" : "关闭本地授权"
             if (await configureNextJsLicense(targetDir, localLicense, run)) initCommitFiles.push("license")
         }
@@ -242,6 +299,11 @@ export async function main(args = process.argv.slice(2), run: CommandRunner = ru
         if (packageManager) {
             console.log(`本地授权: ${localLicense ? "已初始化" : "关闭"}；初始迁移已生成，尚未安装项目依赖或创建数据库。`)
             console.log(`下一步: cd ${projectName}，依次运行 ${getNextJsSetupCommands(packageManager)}。`)
+        }
+
+        if (template.databaseSetup === "supabase") {
+            console.log("Supabase 配置、SQL 迁移和 pnpm 锁文件已保留；尚未安装依赖、连接平台或部署数据库。")
+            console.log(`下一步: cd ${projectName}，按 README.md 配置 Vercel 和 Supabase；本地开发运行 pnpm install --frozen-lockfile，再运行 pnpm dev。`)
         }
     } catch (error) {
         const message = error instanceof Error ? error.message : "未知错误，请重试。"
@@ -328,10 +390,19 @@ export function parseCliOptions(args: string[]): CliOptions {
             index += 1
             continue
         }
+
+        if (current === "--deployment") {
+            const value = args[index + 1]?.trim().toLowerCase()
+            if (!value) throw new Error("参数 --deployment 缺少值，支持 default / vercel-supabase。")
+            if (value !== "default" && value !== "vercel-supabase") throw new Error(`参数 --deployment 无效: ${value}。支持 default / vercel-supabase。`)
+            options.deployment = value
+            index += 1
+            continue
+        }
     }
 
-    if (options.projectType && (options.framework || options.uiLibrary || options.tailwindVersion))
-        throw new Error("参数 --type 不能与 --framework、--ui 或 --tailwind 同时使用。")
+    if (options.projectType && (options.framework || options.uiLibrary || options.tailwindVersion || options.deployment))
+        throw new Error("参数 --type 不能与 --framework、--ui、--tailwind 或 --deployment 同时使用。")
 
     return options
 }
@@ -383,7 +454,8 @@ function getTemplateDefinition(projectType: ProjectType): TemplateDefinition {
 }
 
 function getTemplateDisplayName(template: TemplateDefinition): string {
-    return `${FrameworkLabels[template.framework]} + ${UiLibraryLabels[template.uiLibrary]} + ${TailwindVersionLabels[template.tailwindVersion]}`
+    const name = `${FrameworkLabels[template.framework]} + ${UiLibraryLabels[template.uiLibrary]} + ${TailwindVersionLabels[template.tailwindVersion]}`
+    return template.deployment === "default" ? name : `${name} + ${DeploymentLabels[template.deployment]}`
 }
 
 async function selectTemplate(options: CliOptions): Promise<TemplateDefinition> {
@@ -395,23 +467,49 @@ async function selectTemplate(options: CliOptions): Promise<TemplateDefinition> 
     if (framework === "electron") {
         if (options.tailwindVersion) throw new Error("Electron 项目不支持选择 TailwindCSS 版本，请移除 --tailwind 参数。")
 
-        return getTemplateBySelection(framework, uiLibrary)
+        return getTemplateBySelection(framework, uiLibrary, undefined, options.deployment)
     }
 
     const tailwindVersion = options.tailwindVersion ?? (await promptTailwindVersion(framework, uiLibrary))
     assertTailwindVersionAvailable(framework, uiLibrary, tailwindVersion)
 
-    return getTemplateBySelection(framework, uiLibrary, tailwindVersion)
+    const deployments = TemplateDefinitions.filter(
+        template => template.framework === framework && template.uiLibrary === uiLibrary && template.tailwindVersion === tailwindVersion,
+    ).map(template => template.deployment)
+    const deployment =
+        options.deployment ??
+        (deployments.length > 1 && isInteractive()
+            ? await select<Deployment>({
+                  message: "请选择部署方式:",
+                  default: "default",
+                  choices: deployments.map(value => ({ name: DeploymentLabels[value], value })),
+              })
+            : "default")
+
+    return getTemplateBySelection(framework, uiLibrary, tailwindVersion, deployment)
 }
 
-function getTemplateBySelection(framework: Framework, uiLibrary: UiLibrary, tailwindVersion?: TailwindVersion): TemplateDefinition {
+function getTemplateBySelection(
+    framework: Framework,
+    uiLibrary: UiLibrary,
+    tailwindVersion?: TailwindVersion,
+    deployment: Deployment = "default",
+): TemplateDefinition {
     const templates = TemplateDefinitions.filter(
         template =>
-            template.framework === framework && template.uiLibrary === uiLibrary && (framework === "electron" || template.tailwindVersion === tailwindVersion),
+            template.framework === framework &&
+            template.uiLibrary === uiLibrary &&
+            (framework === "electron" || template.tailwindVersion === tailwindVersion) &&
+            template.deployment === deployment,
     )
 
     if (templates.length !== 1) {
-        const selection = [FrameworkLabels[framework], UiLibraryLabels[uiLibrary], tailwindVersion && TailwindVersionLabels[tailwindVersion]]
+        const selection = [
+            FrameworkLabels[framework],
+            UiLibraryLabels[uiLibrary],
+            tailwindVersion && TailwindVersionLabels[tailwindVersion],
+            DeploymentLabels[deployment],
+        ]
             .filter(Boolean)
             .join(" + ")
 
