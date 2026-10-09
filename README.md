@@ -36,15 +36,17 @@ npx create-geshu@latest --framework nextjs --ui shadcn --tailwind 4 --deployment
 
 包管理器检测和命令映射使用 [package-manager-detector](https://github.com/antfu-collective/package-manager-detector)，优先读取启动脚手架时的包管理器信息。直接使用 Node 启动、没有启动信息时，再检查启动目录的 `packageManager`、`devEngines.packageManager` 和锁文件；都未检测到时默认使用 npm。不会根据克隆下来的模板切换包管理器。
 
-| 启动时的包管理器 | Prisma 执行方式                                        |
-| ---------------- | ------------------------------------------------------ |
-| npm / npx        | `npx --yes --package prisma@<模板版本范围> prisma ...` |
-| pnpm             | `pnpm dlx prisma@<模板版本范围> ...`                   |
-| Yarn 2+          | `yarn dlx prisma@<模板版本范围> ...`                   |
-| Bun              | `bun x prisma@<模板版本范围> ...`                      |
-| Yarn 1           | 明确提示后使用检测库的 `npx` 兼容方式                  |
+| 启动时的包管理器 | Prisma 执行方式                                                    |
+| ---------------- | ------------------------------------------------------------------ |
+| npm / npx        | `npx --yes --package prisma@<模板版本范围> prisma ...`             |
+| pnpm             | `pnpm dlx --allow-build=@prisma/engines prisma@<模板版本范围> ...` |
+| Yarn 2+          | `yarn dlx prisma@<模板版本范围> ...`                               |
+| Bun              | `bun x prisma@<模板版本范围> ...`                                  |
+| Yarn 1           | 明确提示后使用检测库的 `npx` 兼容方式                              |
 
 Yarn 2+ 执行 Prisma 时，临时使用 `node-modules` 安装模式，避免 Windows 下的 PnP 加载兼容问题；不会修改项目的 Yarn 配置。
+
+pnpm 10.2+ 的临时执行命令会明确允许 `@prisma/engines` 构建，避免 pnpm 11 停在“Choose which packages to build”询问。更早的版本不传这个选项；检测信息缺少版本时，先查询 `pnpm --version`。批准范围仅限 Prisma 临时执行所需的引擎，不修改项目或全局的构建审批配置。
 
 创建过程不会安装整个项目的依赖，也不会创建或修改业务数据库。初始 SQL 和 `migration_lock.toml` 会纳入项目的 `feat: init` 提交。
 

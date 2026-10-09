@@ -27,18 +27,38 @@ for (const manager of [
         })
 
         await fs.mkdir(path.join(root, "prisma"))
-        await fs.writeFile(path.join(root, "package.json"), JSON.stringify({ name: "migration-example", private: true, devDependencies: { prisma: "7.10.0" } }))
+        const packageJson = JSON.stringify({ name: "migration-example", private: true, devDependencies: { prisma: "7.10.0" } })
+        await fs.writeFile(path.join(root, "package.json"), packageJson)
         await fs.writeFile(path.join(root, "prisma.config.ts"), 'export default { datasource: { url: "file:./data/development.db" } }')
         await fs.writeFile(
             path.join(root, "prisma/schema.prisma"),
             'datasource db {\n provider = "sqlite"\n}\nmodel Example {\n id String @id\n name String @unique\n}\n',
         )
         await initializeNextJsPrismaMigration(root, manager, (command, args, cwd, options) =>
-            runCommand(command, args, cwd, {
-                ...options,
-                // 模拟通过 npm exec --package 启动脚手架，不能让 Prisma 继承执行外层包。
-                env: { ...options.env, npm_config_package: "create-geshu@0.5.0" },
-            }))
+            runCommand(
+                command,
+                // 隔离 dlx 缓存和 store，并禁用全局依赖复用，覆盖首次下载时的引擎构建。
+                manager.name === "pnpm"
+                    ? [
+                          `--config.cache-dir=${path.join(root, "pnpm-cache")}`,
+                          `--config.store-dir=${path.join(root, "pnpm-store")}`,
+                          "--config.enable-global-virtual-store=false",
+                          ...args,
+                      ]
+                    : args,
+                cwd,
+                {
+                    ...options,
+                    // 模拟通过 npm exec --package 启动脚手架，不能让 Prisma 继承执行外层包。
+                    env: { ...options.env, npm_config_package: "create-geshu@0.5.0" },
+                },
+            ))
+
+        if (manager.name === "pnpm") {
+            assert((await fs.stat(path.join(root, "pnpm-cache/dlx"))).isDirectory())
+            assert((await fs.stat(path.join(root, "pnpm-store"))).isDirectory())
+        }
+
         const database = new DatabaseSync(":memory:")
 
         try {
@@ -51,7 +71,8 @@ for (const manager of [
 
         assert.equal(await fs.stat(path.join(root, "node_modules")).catch(() => null), null)
         assert.equal(await fs.stat(path.join(root, "data")).catch(() => null), null)
-        for (const file of ["package-lock.json", "pnpm-lock.yaml", "bun.lock", "bun.lockb", "yarn.lock"])
+        assert.equal(await fs.readFile(path.join(root, "package.json"), "utf8"), packageJson)
+        for (const file of ["package-lock.json", "pnpm-lock.yaml", "bun.lock", "bun.lockb", "yarn.lock", "pnpm-workspace.yaml", ".npmrc"])
             assert.equal(await fs.stat(path.join(root, file)).catch(() => null), null)
     })
 }

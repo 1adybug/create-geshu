@@ -99,7 +99,7 @@ test("a native manager failure stops initialization without falling back to npx"
     const calls = []
 
     await assert.rejects(
-        initializeNextJsPrismaMigration(directory, { name: "pnpm", agent: "pnpm" }, async command => {
+        initializeNextJsPrismaMigration(directory, { name: "pnpm", agent: "pnpm", version: "11.10.0" }, async command => {
             calls.push(command)
             throw new Error("pnpm registry unavailable")
         }),

@@ -4,6 +4,8 @@ import os from "node:os"
 import path from "node:path"
 import { test } from "node:test"
 
+import spawn from "cross-spawn"
+
 import { detectPackageManager, getNextJsSetupCommands, getPrismaCommand } from "../package-manager.ts"
 
 async function workspace(t, userAgent) {
@@ -27,7 +29,7 @@ async function workspace(t, userAgent) {
 
 for (const [userAgent, expected, executable, prefix] of [
     ["npm/11.12.1 node/v24.15.0", "npm", "npx", ["--yes"]],
-    ["pnpm/11.10.0 npm/? node/v24.15.0", "pnpm", "pnpm", ["dlx"]],
+    ["pnpm/11.10.0 npm/? node/v24.15.0", "pnpm", "pnpm", ["dlx", "--allow-build=@prisma/engines"]],
     ["pnpm/6.35.0 npm/? node/v18.0.0", "pnpm@6", "pnpm", ["dlx"]],
     ["bun/1.3.14 npm/? node/v24.3.0", "bun", "bun", ["x"]],
     ["yarn/4.9.2 npm/? node/v24.15.0", "yarn@berry", "yarn", ["dlx"]],
@@ -55,6 +57,48 @@ for (const [userAgent, expected, executable, prefix] of [
         assert(instructions[2].endsWith("run dev"))
     })
 }
+
+for (const version of ["7.33.7", "9.15.9", "10.1.0", "10.2.0", "10.32.0", "11.10.0"]) {
+    test(`pnpm ${version}: approves Prisma engines only when --allow-build is supported`, () => {
+        const { args } = getPrismaCommand({ name: "pnpm", agent: "pnpm", version }, "^7.10.0", ["migrate", "diff"])
+        const allowsBuild = !["7.33.7", "9.15.9", "10.1.0"].includes(version)
+        assert.deepEqual(args, ["dlx", ...(allowsBuild ? ["--allow-build=@prisma/engines"] : []), "prisma@^7.10.0", "migrate", "diff"])
+    })
+}
+
+for (const [version, prefix] of [
+    ["9.15.9", ["dlx"]],
+    ["11.10.0", ["dlx", "--allow-build=@prisma/engines"]],
+]) {
+    test(`pnpm without version metadata: queries installed ${version} before choosing build approval flags`, async t => {
+        const directory = await workspace(t)
+        await fs.writeFile(path.join(directory, "pnpm-lock.yaml"), "")
+
+        t.mock.method(spawn, "sync", (command, args, options) => {
+            assert.equal(command, "pnpm")
+            assert.deepEqual(args, ["--version"])
+            assert.equal(options.timeout, 10_000)
+            return { status: 0, stdout: `${version}\n` }
+        })
+
+        assert.deepEqual(getPrismaCommand(await detectPackageManager(directory), "^7.10.0", ["migrate", "diff"]), {
+            command: "pnpm",
+            args: [...prefix, "prisma@^7.10.0", "migrate", "diff"],
+        })
+    })
+}
+
+test("pnpm version detection failures stop before launching Prisma", t => {
+    for (const result of [
+        { status: 1, stdout: "11.10.0" },
+        { status: 0, stdout: "invalid" },
+        { status: null, stdout: "", error: new Error("pnpm not found") },
+    ]) {
+        const mock = t.mock.method(spawn, "sync", () => result)
+        assert.throws(() => getPrismaCommand({ name: "pnpm", agent: "pnpm" }, "^7.10.0", ["migrate", "diff"]), /无法确认 pnpm 版本/)
+        mock.mock.restore()
+    }
+})
 
 test("without launcher metadata, explicit packageManager takes priority over lock files", async t => {
     const directory = await workspace(t)
