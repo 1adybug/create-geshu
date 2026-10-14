@@ -24,7 +24,13 @@ const gitEnvironment = {
 
 async function command(executable, args, cwd) {
     return new Promise((resolve, reject) => {
-        const child = crossSpawn(executable, args, { cwd, env: { ...process.env, ...gitEnvironment }, stdio: ["ignore", "pipe", "pipe"] })
+        const child = crossSpawn(executable, args, {
+            cwd,
+            // 独立测试进程不能继承当前 node:test 的执行标记。
+            env: { ...process.env, ...gitEnvironment, NODE_TEST_CONTEXT: undefined },
+            stdio: ["ignore", "pipe", "pipe"],
+        })
+
         let output = ""
 
         child.stdout.on("data", chunk => {
@@ -141,8 +147,24 @@ test("current Next templates: packaged CLI, executable migrations, and license w
             const output = await command(process.execPath, [entry, "--type", type, "--name", type], root)
             assert(output.includes("创建完成"), output)
             assert(output.includes("本地授权: 关闭"), output)
-            await assertScaffold(path.join(root, type), false)
-            console.log(`${type}: 初始 SQL 可执行、账号唯一索引有效、未安装依赖、未创建数据库、初始化提交完整。`)
+            const project = path.join(root, type)
+            await assertScaffold(project, false)
+            const tests = await command(process.execPath, ["--test", "scripts/licenseAgentArtifact.test.mjs", "scripts/deploymentPackages.test.mjs"], project)
+            assert.match(tests, /当前项目未启用离线授权/)
+            assert.match(tests, /没有 license 目录时自动生成无授权业务包/)
+            await fs.mkdir(path.join(project, "license"))
+
+            try {
+                await assert.rejects(
+                    command(process.execPath, ["--test", "--test-name-pattern=模板内置 Agent", "scripts/licenseAgentArtifact.test.mjs"], project),
+                    /ENOENT/,
+                )
+            } finally {
+                await fs.rmdir(path.join(project, "license"))
+            }
+
+            await assertScaffold(project, false)
+            console.log(`${type}: 初始 SQL 可执行、账号唯一索引有效、无授权项目的 Agent 与部署测试通过、未安装依赖、未创建数据库、初始化提交完整。`)
         })
     }
 
